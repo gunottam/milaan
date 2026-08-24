@@ -93,6 +93,7 @@ Treat changes to it with suspicion.
 
 ## Style
 
-- Python 3.12, type hints on all public functions, `@dataclass(frozen=True)` for value types.
+- Python 3.11 (`from __future__ import annotations` at the top of every module),
+  type hints on all public functions, `@dataclass(frozen=True)` for value types.
 - Tests use plain `pytest`, no fixtures framework beyond `tmp_path`.
 - Frontend: Vite + React, plain CSS with the tokens in `docs/spec.md` §13. No UI library.

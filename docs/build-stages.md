@@ -54,6 +54,9 @@ Mark `[x]` when the stage's tests are green.
 > DFS and `itertools.combinations` return identical solution sets.
 >
 > No break injectors yet — clean data only.
+> Also: `tests/test_fees.py` currently asserts against a local stand-in dataclass.
+> Re-point every golden case at the real `core/models.py` type and confirm all 17
+> still pass. A golden test asserting against a mock is worse than none.
 
 **Done when:** `--seed 42` reproduces byte-identical output twice, the property test is green,
 and `truth.json` records `uniqueness` for every resolvable line.
