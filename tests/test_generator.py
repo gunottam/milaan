@@ -13,9 +13,9 @@ STAMP = "2026-08-24T15:30:00+05:30"
 FILES = ("gateway_txns.csv", "bank_statement.csv", "orders.csv", "truth.json")
 
 
-def _run(tmp_path, name, seed=42, bank_lines=24, records=400, noise="high"):
-    data = build(seed, bank_lines, records, noise)
-    truth = build_truth(data, seed, noise, 2, STAMP)
+def _run(tmp_path, name, seed=42, payouts=24, records=400, noise="high"):
+    data = build(seed, payouts, records, noise)
+    truth = build_truth(data, seed, noise, 2, STAMP, payouts=payouts)
     out = tmp_path / name
     emit(out, data, truth)
     return data, truth, out
@@ -43,10 +43,10 @@ def test_the_record_count_is_exact(tmp_path):
 def test_every_bank_line_ties_to_its_settlement_to_the_paise(tmp_path):
     data, _, _ = _run(tmp_path, "a")
     by_id = {t.entity_id: t for t in data.txns}
-    for settlement, line in zip(data.settlements, data.bank_lines):
-        assert settlement.bank_line_id == line.bank_line_id
+    lines = {line.bank_line_id: line for line in data.bank_lines}
+    for settlement in data.settlements:
         composed = sum(net_contribution(by_id[e]) for e in settlement.entity_ids)
-        assert composed == target(line), line.bank_line_id
+        assert composed == target(lines[settlement.bank_line_id]), settlement.settlement_id
 
 
 def test_every_transaction_belongs_to_exactly_one_settlement(tmp_path):
@@ -68,10 +68,12 @@ def test_every_resolvable_line_records_its_uniqueness(tmp_path):
     _, truth, _ = _run(tmp_path, "a")
     for bank_line_id, record in truth["bank_lines"].items():
         if record["resolvable"]:
-            assert record["uniqueness"] in ("verified", "budget_exhausted"), bank_line_id
+            assert record["uniqueness"] in (
+                "verified", "unproven", "by_construction"), bank_line_id
             assert record["composition"], bank_line_id
-            if record["uniqueness"] == "budget_exhausted":
-                assert record["excluded_from_scoring"] is True
+            # An unproven line keeps its real composition and stays in the
+            # denominators; only its uniqueness is unknown. Nothing is excluded.
+            assert "excluded_from_scoring" not in record
         else:
             assert record["composition"] is None
             assert record["injected_breaks"] == ["AMBIGUOUS_SUBSET"]
@@ -79,22 +81,24 @@ def test_every_resolvable_line_records_its_uniqueness(tmp_path):
 
 
 def test_truth_is_json_and_carries_the_run_config(tmp_path):
-    _, _, out = _run(tmp_path, "a", bank_lines=24, records=400)
+    _, _, out = _run(tmp_path, "a", payouts=24, records=400)
     truth = json.loads((out / "truth.json").read_text())
     assert truth["seed"] == 42
     assert truth["generated_at"] == STAMP
-    assert truth["config"] == {"bank_lines": 24, "records": 400,
+    assert truth["config"] == {"payouts": 24, "bank_lines": 24, "records": 400,
                                "noise": "high", "window_days": 2}
     assert len(truth["bank_lines"]) == 24
 
 
 def test_high_noise_leaves_about_30pc_of_narrations_unparseable(tmp_path):
     # §3.4: at --noise high, ~30% of narrations must be unparseable by regex alone.
-    data, _, _ = _run(tmp_path, "a", bank_lines=120, records=1200)
+    # The band is wide because 120 lines is a small sample: sigma is ~4 points, so
+    # a tighter assertion would fail on seed choice rather than on a real change.
+    data, _, _ = _run(tmp_path, "a", payouts=120, records=1200)
     rate = data.unrecoverable_narrations / len(data.bank_lines)
-    assert 0.22 <= rate <= 0.38, rate
+    assert 0.20 <= rate <= 0.40, rate
 
 
 def test_low_noise_leaves_almost_everything_parseable(tmp_path):
-    data, _, _ = _run(tmp_path, "a", bank_lines=120, records=1200, noise="low")
+    data, _, _ = _run(tmp_path, "a", payouts=120, records=1200, noise="low")
     assert data.unrecoverable_narrations / len(data.bank_lines) <= 0.05

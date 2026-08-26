@@ -89,6 +89,11 @@ G3", so this is the spec's own arrangement.
 
 ### Budget split, and the 2 lines that remain
 
+> **Superseded in stage 4.** The offline budget is now 40M, not 2M, and an exhausted search is
+> recorded as `uniqueness: "unproven"` with its real composition rather than
+> `budget_exhausted` + `excluded_from_scoring`. See `stage-04.md`. The reasoning below is the
+> record of what stage 3 decided, not current behaviour.
+
 `UNIQUENESS_NODE_BUDGET` became `_OFFLINE = 2_000_000` (default) and `_LIVE = 20_000`
 (`--live`). Cost tracks the count of *negative-net* items in the pool, not pool size — refunds
 disable the undershoot prune — so an exhausted budget correlates with difficulty, and excluding

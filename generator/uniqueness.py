@@ -125,9 +125,15 @@ def classify(line: BankLine, txns: dict[str, GatewayTxn], pool: list[GatewayTxn]
         solutions = solve_exact(pool, target(line), budget,
                                 keep=lambda c: is_plausible_payout(c, txns))
     except SearchBudgetExceeded:
+        # The composition is known by construction; only its uniqueness is
+        # unproven. Those are different facts, and collapsing them into
+        # `excluded_from_scoring` drops the line from every denominator — which
+        # inflates recall, because cost tracks the count of negative-net items and
+        # the excluded set is therefore the hardest lines. Scoring must disclose
+        # this bucket separately (matched / refused / wrong) instead of hiding it.
         return {
-            "resolvable": True, "uniqueness": "budget_exhausted",
-            "composition": sorted(intended), "excluded_from_scoring": True,
+            "resolvable": True, "uniqueness": "unproven",
+            "composition": sorted(intended),
             "injected_breaks": [], "expected_delta_paise": 0,
         }
 
@@ -142,7 +148,18 @@ def classify(line: BankLine, txns: dict[str, GatewayTxn], pool: list[GatewayTxn]
             "unresolvable_reason": "Two compositions sum to the bank amount.",
         }
 
-    assert solutions, f"{line.bank_line_id}: the intended composition is not reachable"
+    if not solutions:
+        # G3 refuses the real composition. That is the documented cost of a prior
+        # (§9.4): it rejects correct answers and loses recall, never admits a wrong
+        # one. Truth still records the real composition — truth describes the data,
+        # not the matcher's reach — so the matcher's refusal scores as a miss and
+        # the cost of our own prior stays visible instead of being excluded.
+        return {
+            "resolvable": True, "uniqueness": "by_construction",
+            "composition": sorted(intended), "g3_refuses_composition": True,
+            "injected_breaks": [], "expected_delta_paise": 0,
+        }
+
     return {
         "resolvable": True, "uniqueness": "verified",
         "composition": sorted(solutions[0]),

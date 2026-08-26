@@ -11,16 +11,32 @@ SETTLEMENT_WINDOW_DAYS = 2
 # exclusion that correlates with difficulty (cost tracks the count of negative-net
 # items, not pool size), so a live-sized budget quietly inflates recall by
 # dropping the hardest lines. Generate offline; keep the live number honest.
-UNIQUENESS_NODE_BUDGET_OFFLINE = 2_000_000
+# Measured, not guessed: at 2M, 13 of 134 lines went unproven; at 40M, 12 of those
+# 13 resolve — and three of them turn out to be genuinely ambiguous, so the lower
+# budget was hiding true-negative evidence behind "excluded from scoring". The
+# worst single line costs ~6s and offline wall clock buys nothing else.
+UNIQUENESS_NODE_BUDGET_OFFLINE = 40_000_000
 UNIQUENESS_NODE_BUDGET_LIVE = 20_000
 
 C2_MAX_POOL = 35   # Above this, unanchored subset-sum cannot establish uniqueness:
                    # 2**len(pool) exceeds the target range, so by pigeonhole every
                    # target has many representations. Not a budget problem — an
                    # information-theoretic one. C2 must refuse rather than search.
-DEFAULT_BANK_LINES = 120
+DEFAULT_PAYOUTS = 120
 DEFAULT_RECORDS = 3_000
-TARGET_AMBIGUOUS_RATE = 0.08
+
+# Ambiguity needs a DECOY: a transaction in a line's window pool that its
+# composition does not use. With one payout per window there are none — every
+# settled transaction in the window belongs to that window's payout, so the pool
+# IS the composition and G5 is unreachable. A fraction of windows therefore host a
+# second, smaller payout. Two equal-net cross-cycle strays then sit in one window,
+# one claimed by each payout, and swapping them leaves both settlements complete —
+# the only ambiguity G3 permits. The cycle's record budget is SPLIT between the two
+# payouts rather than added to, so the combined pool stays under C2_MAX_POOL.
+SHARED_WINDOW_RATE = 0.10
+SECOND_PAYOUT_MAX_ITEMS = 8
+MAX_PAYOUT_ITEMS = 30       # keeps count + strays under C2_MAX_POOL, so the
+                            # pigeonhole bound of §9.3 is never crossed by design
 
 EPOCH = date(2026, 1, 1)          # first settlement cycle; fixed so runs are reproducible
 
@@ -51,14 +67,31 @@ PRICE_POINTS = (
 )
 JITTER_PAISE = 500                # ±₹5 around the catalogue price
 
-# §6.2 rate control. A sticky-priced UPI payment carries no jitter and zero MDR,
-# so two of them have IDENTICAL net contributions — which is how AMBIGUOUS_SUBSET
-# arises naturally. Ambiguity is roughly quadratic in this share, hence the small
-# value; stage 4 tunes it against TARGET_AMBIGUOUS_RATE across five seeds.
+# A sticky-priced UPI payment carries no jitter and zero MDR, so two of them have
+# IDENTICAL net contributions. On its own this produces no ambiguity at all — the
+# swap it enables drops a member from its own settlement, and G3 rejects the
+# partial slice (measured at 25x this rate: still zero). It matters only as the
+# substrate for the shared-window mechanism above.
 STICKY_PRICES = (999_00, 499_00)
-STICKY_PRICE_RATE = 0.012
+STICKY_PRICE_RATE = 0.05
+
+# A cross-cycle refund reverses a product purchase, and product purchases sit on
+# catalogue prices — the ±₹5 jitter is the artefact here, not the collision. So
+# EVERY cross-cycle refund prefers a catalogue-priced parent, in every window. The
+# rule must not be conditional on the window being shared: that would rig the two
+# payouts that can produce an ambiguity while leaving every other refund alone.
+# Each payout draws independently from the same population; whether two draws
+# collide is left to the rng, and the rate is reported rather than targeted.
+PREFER_CATALOGUE_REFUND_PARENT = True
 
 REFUND_RATE = 0.06                # share of records that are refunds
+
+# A real payout routinely nets a refund from a prior cycle that was never tagged to
+# the settlement batch: `settlement_id = null`, deducted from this payout anyway.
+# §9.4's second row exists for exactly this shape — one complete settlement plus one
+# or two strays — so it is baseline generation, not an injected break.
+CROSS_CYCLE_REFUND_RATE = 0.35    # share of payouts that net one
+CROSS_CYCLE_MAX_ITEMS = 2         # §9.4 accepts 1-2 strays, never 3
 FX_RATE_MICROS = 83_500_000       # ₹83.50/USD, jittered per transaction
 
 # Narration degradation, §3.4. `drop`/`blank` are what makes a line unparseable by
@@ -68,6 +101,6 @@ NOISE_PROFILES = {
                "collapse": 0.05, "upper": 0.05, "abbrev": 0.05, "ref_no": 0.90},
     "medium": {"drop": 0.07, "blank": 0.03, "truncate": 0.15, "transpose": 0.05,
                "collapse": 0.20, "upper": 0.20, "abbrev": 0.20, "ref_no": 0.55},
-    "high":   {"drop": 0.16, "blank": 0.06, "truncate": 0.28, "transpose": 0.08,
+    "high":   {"drop": 0.19, "blank": 0.06, "truncate": 0.28, "transpose": 0.08,
                "collapse": 0.45, "upper": 0.45, "abbrev": 0.45, "ref_no": 0.25},
 }
