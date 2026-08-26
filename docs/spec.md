@@ -516,6 +516,14 @@ debit matches one `disp_*` with a negative net.
 inference — which is why an on-hold release settled outside the window is recoverable through
 C1 and invisible to C2.
 
+**C2 is a small-pool tier, not a general fallback (stage 3 finding).** Subset-sum carries
+information only while `2**len(pool)` stays near the range of reachable targets. A pool of ~75
+transactions across a ~₹3 lakh spread has vastly more subsets than attainable sums, so by
+pigeonhole *every* target has many representations and no node budget can establish
+uniqueness — an information-theoretic limit, not a performance one. C2 therefore refuses above
+`C2_MAX_POOL = 35` rather than searching. **C1's anchored residual search is the primary search
+path;** C2 covers only lines with no recoverable identifier *and* a small window pool.
+
 ```python
 def solve(pool, target, *, window_days, extra_terms, tol) -> list[Solution]:
     """Signature PINNED. Deterministic path passes extra_terms=(), tol=0."""

@@ -1,0 +1,107 @@
+"""Domain model. §3 of the spec.
+
+Value types are frozen. Money is `int` paise everywhere (I1). Timestamps are
+IST-aware ISO8601 strings, dates are IST calendar dates as `YYYY-MM-DD` — both
+stored as text so a CSV round-trip is lossless.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from core.money import Paise
+
+GATEWAY_COLUMNS = (
+    "entity_id", "type", "created_at", "settled_at", "settlement_id",
+    "settlement_utr", "order_id", "payment_id", "method", "card_network",
+    "international", "amount_paise", "fee_paise", "tax_paise", "tds_paise",
+    "source_currency", "source_amount_minor", "fx_rate_micros", "on_hold",
+    "settled", "description", "notes",
+)
+BANK_COLUMNS = (
+    "bank_line_id", "txn_date", "value_date", "narration", "ref_no",
+    "debit_paise", "credit_paise", "balance_paise",
+)
+ORDER_COLUMNS = (
+    "order_id", "order_date", "customer_ref", "gross_paise", "currency",
+    "status", "invoice_no",
+)
+
+
+@dataclass(frozen=True)
+class GatewayTxn:
+    """A row of `gateway_txns.csv`. `amount_paise` is always positive — the sign
+    of the contribution comes from `type`."""
+
+    entity_id: str
+    type: str
+    amount_paise: Paise
+    method: str = "upi"
+    created_at: str = ""
+    settled_at: str | None = None
+    settlement_id: str | None = None
+    settlement_utr: str | None = None
+    order_id: str | None = None
+    payment_id: str | None = None
+    card_network: str | None = None
+    international: bool = False
+    fee_paise: Paise = 0
+    tax_paise: Paise = 0
+    tds_paise: Paise = 0
+    source_currency: str | None = None
+    source_amount_minor: int | None = None
+    fx_rate_micros: int | None = None
+    on_hold: bool = False
+    settled: bool = True
+    description: str = ""
+    notes: str = ""
+
+    @property
+    def net(self) -> Paise:
+        return net_contribution(self)
+
+
+@dataclass(frozen=True)
+class BankLine:
+    """A row of `bank_statement.csv`. `balance_paise` is presentational only."""
+
+    bank_line_id: str
+    txn_date: str
+    value_date: str
+    narration: str
+    ref_no: str | None
+    debit_paise: Paise
+    credit_paise: Paise
+    balance_paise: Paise
+
+
+@dataclass(frozen=True)
+class Order:
+    """A row of `orders.csv` — the ERP side, used for the §3.3 tie-out."""
+
+    order_id: str
+    order_date: str
+    customer_ref: str
+    gross_paise: Paise
+    currency: str
+    status: str
+    invoice_no: str | None
+
+
+def net_contribution(t: GatewayTxn) -> Paise:
+    """What the transaction contributes to a payout. Never falls through — an
+    unknown type is a generator bug and must crash loudly."""
+    match t.type:
+        case "payment":
+            return t.amount_paise - t.fee_paise - t.tax_paise - t.tds_paise
+        case "refund" | "dispute" | "transfer" | "adjustment_debit":
+            return -t.amount_paise
+        case "adjustment_credit":
+            return t.amount_paise
+        case _:
+            raise ValueError(f"unknown txn type: {t.type}")
+
+
+def target(line: BankLine) -> Paise:
+    """Signed target (finding 8.1) — negative for debit lines."""
+    return line.credit_paise - line.debit_paise

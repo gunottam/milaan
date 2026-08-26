@@ -1,13 +1,14 @@
-"""Fee, tax and allocation. §4 of the spec.
+"""Fee and tax. §4.1–4.2 of the spec.
 
 The only module permitted to use `Decimal` for rate multiplication (I1).
+Allocation lives in `generator/allocate.py` per §14.
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Protocol
 
+from core.models import GatewayTxn
 from core.money import Paise, round_paise
 
 MDR_BY_METHOD = {
@@ -23,14 +24,7 @@ FX_MARKUP = Decimal("0.0100")   # folded into fee_paise, never a separate term (
 INSTANT_FLAT = 25_00            # ₹25 per instant settlement, allocated per §4.3
 
 
-class Txn(Protocol):
-    entity_id: str
-    method: str
-    amount_paise: Paise
-    international: bool
-
-
-def expected_fee(txn: Txn) -> tuple[Paise, Paise, Paise]:
+def expected_fee(txn: GatewayTxn) -> tuple[Paise, Paise, Paise]:
     """(fee, tax, tds). Payments only — everything else carries fee_paise = 0.
 
     GST is taken on the already-rounded fee. Reversing that order makes
@@ -41,12 +35,3 @@ def expected_fee(txn: Txn) -> tuple[Paise, Paise, Paise]:
     tax = round_paise(fee * GST_ON_FEE)
     tds = round_paise(txn.amount_paise * TDS_194O)
     return fee, tax, tds
-
-
-def allocate(total: Paise, txns: list[Txn]) -> dict[str, Paise]:
-    """Even split; the `total % n` remainder is DELIBERATELY discarded (§4.3).
-
-    That dropped remainder is the ROUNDING_DRIFT break and what G4's band catches.
-    """
-    per = total // len(txns)
-    return {t.entity_id: per for t in txns}

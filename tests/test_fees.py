@@ -3,18 +3,17 @@ from decimal import Decimal
 
 import pytest
 
-from core.fees import allocate, expected_fee
+from core.fees import expected_fee
+from core.models import GatewayTxn
 from core.money import fmt_inr, in_window, ist_date, round_paise, to_paise, window_key
+from generator.allocate import allocate
 
 
-class Txn:
-    """Minimal stand-in until core/models.py exists."""
-
-    def __init__(self, entity_id, method, amount_paise, international=False):
-        self.entity_id = entity_id
-        self.method = method
-        self.amount_paise = amount_paise
-        self.international = international
+def payment(entity_id: str, method: str, amount_paise: int, international: bool = False):
+    return GatewayTxn(
+        entity_id=entity_id, type="payment", amount_paise=amount_paise,
+        method=method, international=international,
+    )
 
 
 # --- §4.2 golden cases -------------------------------------------------------
@@ -22,7 +21,7 @@ class Txn:
 
 def test_card_2pc_mdr_gst_tds():
     # ₹12,000 card: the done-when case.
-    fee, tax, tds = expected_fee(Txn("pay_1", "card", 12_000_00))
+    fee, tax, tds = expected_fee(payment("pay_1", "card", 12_000_00))
     assert (fee, tax, tds) == (24000, 4320, 1200)
     assert 12_000_00 - fee - tax - tds == 1170480
 
@@ -30,52 +29,52 @@ def test_card_2pc_mdr_gst_tds():
 def test_gst_is_computed_on_the_rounded_fee():
     # ₹251.25 card -> raw fee 502.5 paise. HALF_UP to 503, then 18% of 503 = 90.54 -> 91.
     # 18% of the UNROUNDED 502.5 is 90.45 -> 90. The order is load-bearing.
-    fee, tax, _ = expected_fee(Txn("pay_2", "card", 25125))
+    fee, tax, _ = expected_fee(payment("pay_2", "card", 25125))
     assert fee == 503
     assert tax == 91
     assert round_paise(Decimal("502.5") * Decimal("0.18")) == 90
 
 
 def test_upi_is_zero_rated_but_still_withholds_tds():
-    fee, tax, tds = expected_fee(Txn("pay_3", "upi", 99_900))
+    fee, tax, tds = expected_fee(payment("pay_3", "upi", 99_900))
     assert (fee, tax) == (0, 0)
     assert tds == 100          # 99.9 paise, HALF_UP
 
 
 def test_rupay_debit_is_zero_rated():
-    fee, tax, _ = expected_fee(Txn("pay_4", "rupay_debit", 5_000_00))
+    fee, tax, _ = expected_fee(payment("pay_4", "rupay_debit", 5_000_00))
     assert (fee, tax) == (0, 0)
 
 
 def test_international_card_folds_fx_markup_into_fee():
     # 2% MDR + 1% FX markup = 3%, all inside fee_paise. No separate FX term (I7).
-    fee, tax, tds = expected_fee(Txn("pay_5", "card", 10_000_00, international=True))
+    fee, tax, tds = expected_fee(payment("pay_5", "card", 10_000_00, international=True))
     assert fee == 30000
     assert tax == 5400
     assert tds == 1000
 
 
 def test_intl_card_method_is_3pc_before_the_markup():
-    domestic = expected_fee(Txn("pay_6", "intl_card", 10_000_00))[0]
-    abroad = expected_fee(Txn("pay_7", "intl_card", 10_000_00, international=True))[0]
+    domestic = expected_fee(payment("pay_6", "intl_card", 10_000_00))[0]
+    abroad = expected_fee(payment("pay_7", "intl_card", 10_000_00, international=True))[0]
     assert domestic == 30000
     assert abroad == 40000
 
 
 def test_tds_is_a_tenth_of_a_percent():
-    assert expected_fee(Txn("pay_8", "upi", 1_00_000_00))[2] == 10000
+    assert expected_fee(payment("pay_8", "upi", 1_00_000_00))[2] == 10000
 
 
 def test_unknown_method_raises():
     with pytest.raises(KeyError):
-        expected_fee(Txn("pay_9", "crypto", 100))
+        expected_fee(payment("pay_9", "crypto", 100))
 
 
 # --- §4.3 allocation ---------------------------------------------------------
 
 
 def test_allocation_remainder_is_dropped_by_integer_division():
-    txns = [Txn(f"pay_{i}", "card", 100) for i in range(3)]
+    txns = [payment(f"pay_{i}", "card", 100) for i in range(3)]
     alloc = allocate(25_00, txns)
     assert alloc == {"pay_0": 833, "pay_1": 833, "pay_2": 833}
     assert 25_00 - sum(alloc.values()) == 1        # the ROUNDING_DRIFT paise
@@ -83,12 +82,12 @@ def test_allocation_remainder_is_dropped_by_integer_division():
 
 def test_allocation_drift_is_bounded_by_n_minus_1():
     for n in range(1, 12):
-        txns = [Txn(f"pay_{i}", "upi", 100) for i in range(n)]
+        txns = [payment(f"pay_{i}", "upi", 100) for i in range(n)]
         assert 0 <= 25_00 - sum(allocate(25_00, txns).values()) <= n - 1
 
 
 def test_allocation_of_an_exact_multiple_leaves_no_drift():
-    txns = [Txn(f"pay_{i}", "upi", 100) for i in range(4)]
+    txns = [payment(f"pay_{i}", "upi", 100) for i in range(4)]
     alloc = allocate(2400, txns)
     assert set(alloc.values()) == {600}
     assert sum(alloc.values()) == 2400
