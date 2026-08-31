@@ -35,3 +35,10 @@ def expected_fee(txn: GatewayTxn) -> tuple[Paise, Paise, Paise]:
     tax = round_paise(fee * GST_ON_FEE)
     tds = round_paise(txn.amount_paise * TDS_194O)
     return fee, tax, tds
+
+
+def gst_on(fee: Paise) -> Paise:
+    """GST on an already-rounded fee. §4.2's second line, exposed on its own so a
+    caller that needs the tax on a flat charge — §10.2's ₹25 instant premium — does
+    not have to multiply a rate outside this module (I1)."""
+    return round_paise(fee * GST_ON_FEE)

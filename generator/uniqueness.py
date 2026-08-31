@@ -13,21 +13,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from core.coherence import is_plausible_payout
+from core.coherence import book_shape, is_plausible_payout
 from core.models import BankLine, GatewayTxn, target
-from core.money import ist_date, window_key
+from core.money import window_key
 from core.subsetsum import SearchBudgetExceeded, solve_exact
 from generator.config import UNIQUENESS_NODE_BUDGET_OFFLINE
 
-
-def _shape(txns: dict[str, GatewayTxn], composition: tuple[str, ...]) -> list[tuple]:
-    """The tax-and-timing fingerprint of a composition. Two compositions with the
-    same fingerprint post identical books, so the ambiguity is `equivalent`."""
-    return sorted(
-        (t.type, t.method, t.amount_paise, t.fee_paise, t.tax_paise, t.tds_paise,
-         ist_date(t.settled_at).isoformat() if t.settled_at else "")
-        for t in (txns[e] for e in composition)
-    )
 
 
 def classify(line: BankLine, txns: dict[str, GatewayTxn], pool: list[GatewayTxn],
@@ -61,7 +52,7 @@ def classify(line: BankLine, txns: dict[str, GatewayTxn], pool: list[GatewayTxn]
             "resolvable": False, "composition": None,
             "injected_breaks": ["AMBIGUOUS_SUBSET"],
             "ambiguity_class": "equivalent"
-            if _shape(txns, solutions[0]) == _shape(txns, solutions[1])
+            if book_shape(solutions[0], txns) == book_shape(solutions[1], txns)
             else "consequential",
             "alternate_compositions": [sorted(s) for s in solutions],
             "unresolvable_reason": "Two compositions sum to the bank amount.",

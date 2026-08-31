@@ -174,7 +174,7 @@ tiny deadline produces a partial report rather than a crash.
 
 ---
 
-## [ ] Stage 10 — audit and diagnostics
+## [x] Stage 10 — audit and diagnostics
 
 > Read `@docs/spec.md` sections 9.7, 10, 10.2. Build `matcher/audit.py` (Phase E residue gap
 > with the four-way partition, coherence audit) and `matcher/diagnose.py` (the six delta

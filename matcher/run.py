@@ -35,7 +35,7 @@ from matcher.proposers.base import Claim
 from matcher.proposers.lookup_p import LookupProposer
 from matcher.proposers.regex_p import RegexProposer
 from matcher.proposers.search_p import SearchProposer
-from matcher.uniqueness import resolve
+from matcher.uniqueness import finalists, resolve
 from matcher.verify import Verdict, check
 
 MATCH_DEADLINE_MS = 22_000   # §15's Phase C allocation, and the whole ladder's clock
@@ -211,11 +211,19 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                                       "pool": len(pools[line.bank_line_id]),
                                       "candidates": 0, "won": False,
                                       "stale": 0, "refused": True, "anchors": [],
-                                      "unproven": refusal})
+                                      "unproven": refusal, "tied": []})
                     continue
                 verdicts = [(claim, check(claim, line, by_id, claimed))
                             for claim in claims]
                 won, verdict = resolve(verdicts)
+                # The compositions G5 tied on, when it refused. Stage 10's ledger
+                # splits AMBIGUOUS_EQUIVALENT from AMBIGUOUS_CONSEQUENTIAL by
+                # comparing their book shapes (§10.1), and it cannot do that from a
+                # refusal that says only "2 tie". Recorded on the refusal only:
+                # carrying the losing candidates of every line would put the whole
+                # search space in the trace for no reader.
+                tied = ([sorted(c.composition) for c, _ in finalists(verdicts)]
+                        if won is None and verdict is not None else [])
                 trace.append({
                     "line": line.bank_line_id, "tier": tier.name, "pass": pass_no,
                     # The size the sort saw — this tier's opening snapshot. The
@@ -230,6 +238,7 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                     "anchors": sorted({c.anchor_settlement_id for c in claims
                                        if c.anchor_settlement_id}),
                     "unproven": refusal,
+                    "tied": tied,
                 })
                 if won is None:
                     continue

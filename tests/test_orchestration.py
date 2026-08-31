@@ -26,7 +26,7 @@ from core.models import BankLine, GatewayTxn
 from core.subsetsum import DeadlineExceeded, SearchBudgetExceeded, solve_tolerance
 from matcher.proposers.search_p import SearchProposer
 from matcher.run import PROPAGATION_PASSES, Run, run_ladder
-from scoring.score import anchors_recovered, render, score
+from scoring.score import anchors_recovered, phase_e, render, score
 
 LADDER = ("A1", "A2", "A3", "B1", "B2", "C1", "C2")
 
@@ -38,7 +38,10 @@ def _board(data, truth, ladder: Run) -> str:
                            for b, (_, c, _) in ladder.matched.items()})
     anchors = anchors_recovered(ladder.trace, truth,
                                {t.entity_id: t.settlement_id for t in data.txns})
-    return render(report, truth, ladder, anchors, at_risk, "data/runs/seed42")
+    residue, ledger = phase_e(list(data.txns), list(data.bank_lines),
+                              list(data.orders), ladder)
+    return render(report, truth, ladder, anchors, at_risk, "data/runs/seed42",
+                  residue, ledger)
 
 
 @pytest.fixture(scope="session")

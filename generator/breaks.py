@@ -580,8 +580,18 @@ class Injected:
     manifest: dict[str, dict]
 
 
-def inject(data: Dataset, seed: int, window_days: int) -> Injected:
-    """Run every injector once, in a fixed order, over a working copy."""
+def inject(data: Dataset, seed: int, window_days: int,
+           counts: dict[str, int] | None = None) -> Injected:
+    """Run every injector once, in a fixed order, over a working copy.
+
+    `counts` overrides `BREAK_COUNTS` per code, and a code set to 0 does not fire.
+    It exists for one test: stage 10's residue gap has to be measured against a
+    dataset carrying exactly one `WITHHELD_RECORD` and nothing else, because the
+    assertion is that the gap equals *that record's* net — an isolation the full
+    manifest cannot give. The default is `BREAK_COUNTS` unchanged, so no committed
+    dataset moves.
+    """
+    counts = {**BREAK_COUNTS, **(counts or {})}
     w = Work(
         txns={t.entity_id: t for t in data.txns},
         lines={line.bank_line_id: line for line in data.bank_lines},
@@ -590,7 +600,7 @@ def inject(data: Dataset, seed: int, window_days: int) -> Injected:
         rng=random.Random(seed ^ 0xB4EA),
         window_days=window_days,
     )
-    manifest = {code: {"injected": fire(w, BREAK_COUNTS[code]),
+    manifest = {code: {"injected": fire(w, counts[code]),
                        "caught": None, "missed": None}
                 for code, fire in INJECTORS}
 

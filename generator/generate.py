@@ -126,12 +126,13 @@ def emit(out: Path, data: Dataset, truth: dict) -> None:
 
 
 def generate(seed: int, payouts: int, records: int, noise: str, window_days: int,
-             generated_at: str, budget: int, breaks: bool = True) -> tuple[Dataset, dict]:
+             generated_at: str, budget: int, breaks: bool = True,
+             break_counts: dict[str, int] | None = None) -> tuple[Dataset, dict]:
     """Build, optionally inject, and describe. Used by the CLI and the tests."""
     data = build(seed, payouts, records, noise, window_days)
     extra: dict = {}
     if breaks:
-        injected = inject(data, seed, window_days)
+        injected = inject(data, seed, window_days, break_counts)
         data = injected.data
         extra = {"line_breaks": injected.line_breaks, "forced": injected.forced,
                  "settlement_notes": injected.settlement_notes,

@@ -15,6 +15,7 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 
 from core.models import GatewayTxn
+from core.money import ist_date
 
 MAX_STRAY_ITEMS = 2     # §9.4: "one complete settlement + 1–2 items"
 
@@ -60,3 +61,31 @@ def is_plausible_payout(composition: Iterable[str],
     # No whole group: only a handful of unassigned cross-cycle items, which is how
     # a chargeback debit or a stranded refund reaches the bank on its own (B2).
     return not partial and strays <= MAX_STRAY_ITEMS
+
+
+def book_shape(composition: Iterable[str],
+               txns: Mapping[str, GatewayTxn]) -> list[tuple]:
+    """The tax-and-timing fingerprint of a composition, §10.1.
+
+    Two compositions with the same fingerprint post identical books: same types,
+    methods, amounts, fee, GST, TDS and settlement dates, differing only in which
+    entity ids carry them. That is the whole difference between
+    `AMBIGUOUS_EQUIVALENT` — a 30-second documentation task — and
+    `AMBIGUOUS_CONSEQUENTIAL`, which changes a tax figure or a counterparty and
+    needs investigation.
+
+    Lives here because both callers need it and neither may import the other: the
+    generator's uniqueness oracle stamps `ambiguity_class` into truth, and the
+    matcher's exception ledger derives the same split with no access to truth. If
+    they drifted, exception typing would be scored against a rule the ledger does
+    not apply.
+
+    Entity ids are deliberately absent. They are the one thing the alternatives
+    are guaranteed to differ in, so including them would make every ambiguity
+    consequential.
+    """
+    return sorted(
+        (t.type, t.method, t.amount_paise, t.fee_paise, t.tax_paise, t.tds_paise,
+         ist_date(t.settled_at).isoformat() if t.settled_at else "")
+        for t in (txns[e] for e in composition)
+    )

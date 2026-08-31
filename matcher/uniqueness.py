@@ -14,6 +14,27 @@ from matcher.proposers.base import Claim
 from matcher.verify import Verdict
 
 
+def finalists(passing: Sequence[tuple[Claim, Verdict]]
+              ) -> list[tuple[Claim, Verdict]]:
+    """The approved pairs at the smallest `|delta|`, which is what G5 judges.
+
+    Exposed because two callers need the same rule and a second copy of it would
+    be a copy of the tie-break: `resolve` decides, and the exception ledger needs
+    the tied compositions themselves to split `AMBIGUOUS_EQUIVALENT` from
+    `AMBIGUOUS_CONSEQUENTIAL` (§10.1). A refusal that reported only "2 tie" would
+    force the ledger to guess which two.
+
+    Exact beats tolerance: §9.3 takes the minimum `|delta|` and refuses only on
+    ties *at that minimum*. A delta-0 answer and a delta-2 answer do not tie — one
+    is arithmetic and the other is a relaxation of it.
+    """
+    approved = [(claim, verdict) for claim, verdict in passing if verdict.ok]
+    if not approved:
+        return []
+    best = min(abs(verdict.delta_paise) for _, verdict in approved)
+    return [(c, v) for c, v in approved if abs(v.delta_paise) == best]
+
+
 def resolve(passing: Sequence[tuple[Claim, Verdict]]
             ) -> tuple[Claim | None, Verdict | None]:
     """The single surviving `(claim, verdict)` for a line, or a G5 refusal.
@@ -26,17 +47,14 @@ def resolve(passing: Sequence[tuple[Claim, Verdict]]
     by two proposers is one answer, not a tie; the first pair is returned, which
     under tier-major ordering is the earliest tier's.
 
-    Exact beats tolerance: §9.3 takes the minimum `|delta|` and refuses only on ties
-    *at that minimum* with different sets. A delta-0 answer and a delta-2 answer do
-    not tie — one of them is arithmetic and the other is a relaxation of it.
+    Exact beats tolerance — see `finalists`, which is where that rule lives.
     """
-    approved = [(claim, verdict) for claim, verdict in passing if verdict.ok]
-    if not approved:
+    tied = finalists(passing)
+    if not tied:
         return None, None
 
-    best = min(abs(verdict.delta_paise) for _, verdict in approved)
-    finalists = [(c, v) for c, v in approved if abs(v.delta_paise) == best]
-    distinct = {frozenset(claim.composition) for claim, _ in finalists}
+    best = abs(tied[0][1].delta_paise)
+    distinct = {frozenset(claim.composition) for claim, _ in tied}
     if len(distinct) > 1:
         return None, Verdict(
             ok=False, gate="G5",
@@ -47,4 +65,4 @@ def resolve(passing: Sequence[tuple[Claim, Verdict]]
             # G4's outcome belongs to a claim, and this refusal belongs to a set.
             tolerance=None,
         )
-    return finalists[0]
+    return tied[0]

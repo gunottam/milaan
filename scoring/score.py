@@ -27,6 +27,8 @@ from pathlib import Path
 from core.models import BankLine, GatewayTxn, Order, read_csv
 from core.money import fmt_inr
 from generator.config import UNIQUENESS_NODE_BUDGET_OFFLINE
+from matcher import ledger as exception_ledger
+from matcher.audit import Residue, coherence_audit, residue_gap
 from matcher.run import MATCH_DEADLINE_MS, Run, run_ladder
 
 # Bucket -> what sits in it, and why it is not in the headline.
@@ -268,8 +270,57 @@ def _pass_two(trace: Sequence[Mapping]) -> str:
                                      else " (nothing pass 1 had not already)")
 
 
+def phase_e(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
+            orders: Sequence[Order], ladder: Run
+            ) -> tuple[Residue, exception_ledger.Ledger]:
+    """§9.7 and §10, over whatever the ladder proved.
+
+    **Unconditional, and that is the point of §9.10.** When the deadline fires the
+    ladder stops issuing work and returns a partial `Run`; Phase E still runs, still
+    renders, and says so. A reconciler that skips its own trial balance because it
+    ran out of time has converted a partial answer into no answer — and the partial
+    answer is the one that demonstrates the thesis.
+
+    One function because there is one order to do this in and three callers who
+    would otherwise each re-derive it: the composition map feeds all three of the
+    residue partition, the coherence audit and the ledger.
+    """
+    compositions = {bid: claim.composition
+                    for bid, (_, claim, _) in ladder.matched.items()}
+    claimed = [e for composition in compositions.values() for e in composition]
+    residue = residue_gap(txns, bank_lines, compositions, claimed,
+                          partial=ladder.deadline_hit)
+    splits = coherence_audit(compositions, {t.entity_id: t for t in txns})
+    ledger = exception_ledger.build(
+        txns, bank_lines, orders, matched=compositions, trace=ladder.trace,
+        exceeded=ladder.exceeded, splits=splits, deadline_hit=ladder.deadline_hit)
+    return residue, ledger
+
+
+def _reconciliation(residue: Residue, ledger: exception_ledger.Ledger) -> list[str]:
+    """§11: the residue gap should reconcile to a single identifiable cause.
+
+    Phase E derives the size of the hole globally, over two sums, knowing nothing
+    about which line was short. The ledger derives it per line, from each open
+    line's own arithmetic. When the two agree the figure has been established twice
+    by independent routes — and when they do not, the difference is the part of the
+    board that neither analysis explains, which is exactly the number a reviewer
+    should be shown rather than the two that agree.
+    """
+    rows = ledger.by_type().get("WITHHELD_RECORD", ())
+    sized, total = ledger.sized("WITHHELD_RECORD")
+    return [f"    {len(rows)} lines typed WITHHELD_RECORD; {sized} sized their own "
+            f"gap from a recovered settlement ({fmt_inr(total)}),",
+            f"    {len(rows) - sized} recovered no identifier and can size nothing "
+            "(§9.1). The gap above is derived",
+            "    globally from two sums, with no reference to any line's analysis "
+            "— it is the",
+            "    only figure here that survives a line nothing could identify."]
+
+
 def render(report: Report, truth: Mapping, ladder: Run,
-           anchors: Mapping, at_risk: Mapping[str, int], run: Path) -> str:
+           anchors: Mapping, at_risk: Mapping[str, int], run: Path,
+           residue: Residue, ledger: exception_ledger.Ledger) -> str:
     """The scoreboard. Headline first, then everything held out of it by name.
 
     Nothing machine-dependent is printed here. §11: a wall clock makes the result a
@@ -295,7 +346,11 @@ def render(report: Report, truth: Mapping, ladder: Run,
            f"wrong {anchors['wrong']}, no true anchor {anchors['no_true_anchor']}) "
            f"· lines closed {len(matched)}",
            f"  propagation pass 2 closed {_pass_two(trace)}",
-           *budget_banner(truth), *ladder.banner(), ""]
+           *budget_banner(truth), *ladder.banner(), "",
+           # §13: the residue gap sits in the header — it is the global honesty
+           # indicator, and it is the one number here derived without reference to
+           # any individual line's analysis.
+           *residue.lines(), *_reconciliation(residue, ledger), ""]
 
     head = report.counts("headline")
     out += [f"HEADLINE — {BUCKETS['headline']}", _rule(),
@@ -367,19 +422,27 @@ def main(argv: list[str] | None = None) -> int:
     truth = json.loads((args.run / "truth.json").read_text(encoding="utf-8"))
     txns = read_csv(args.run / "gateway_txns.csv", GatewayTxn)
     bank_lines = read_csv(args.run / "bank_statement.csv", BankLine)
-    read_csv(args.run / "orders.csv", Order)      # §3.3 tie-out is stage 10
+    orders = read_csv(args.run / "orders.csv", Order)
 
     ladder = run_ladder(txns, bank_lines, truth["config"]["window_days"],
                         deadline_ms=args.deadline_ms)
     matched, trace = ladder.matched, ladder.trace
     compositions = {bid: claim.composition for bid, (_, claim, _) in matched.items()}
     report = score(truth, compositions)
+
+    # Phase E, unconditionally — see `phase_e`. §9.10: a deadline-cut run still
+    # owes the reader a trial balance and an exception ledger.
+    residue, ledger = phase_e(txns, bank_lines, orders, ladder)
+
     anchors = anchors_recovered(
         trace, truth, {t.entity_id: t.settlement_id for t in txns})
     at_risk = {line.bank_line_id: abs(line.credit_paise - line.debit_paise)
                for line in bank_lines}
 
-    print(render(report, truth, ladder, anchors, at_risk, args.run))
+    print(render(report, truth, ladder, anchors, at_risk, args.run,
+                 residue, ledger))
+    print()
+    print("\n".join(exception_ledger.render(ledger)))
     # Outside the board on purpose (§11): the wall clock is the one number here
     # that belongs to the machine rather than to the method.
     print(f"\n  wall clock {ladder.elapsed_ms / 1000:.1f}s  "
@@ -401,6 +464,13 @@ def main(argv: list[str] | None = None) -> int:
             "break_manifest": report.break_manifest,
             "emergent_breaks": report.emergent_breaks,
             "anchors": anchors,
+            "residue": {"gap_paise": residue.gap_paise,
+                        "open_lines_paise": residue.open_lines_paise,
+                        "unclaimed_due_paise": residue.unclaimed_due_paise,
+                        "census": dict(residue.census),
+                        "reconciles": residue.reconciles,
+                        "partial": residue.partial},
+            "ledger": ledger.as_dict(),
         }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return 0
 

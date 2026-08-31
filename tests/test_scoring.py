@@ -16,7 +16,7 @@ from generator.config import UNIQUENESS_NODE_BUDGET_OFFLINE
 from generator.generate import emit
 from matcher.run import Run, build_tiers, run_ladder
 from scoring.score import (BUCKETS, anchors_recovered, bucket, budget_banner,
-                           outcome, precision, recall, render, score)
+                           outcome, phase_e, precision, recall, render, score)
 
 
 RESOLVABLE = {"resolvable": True, "uniqueness": "verified", "injected_breaks": [],
@@ -313,8 +313,11 @@ def test_the_scoreboard_renders(baseline):
                                 {t.entity_id: t.settlement_id for t in data.txns})
     at_risk = {l.bank_line_id: abs(l.credit_paise - l.debit_paise)
                for l in data.bank_lines}
-    text = render(report, truth, Run(matched, list(trace), passes_run=2),
-                  anchors, at_risk, "data/runs/seed42")
+    ladder = Run(matched, list(trace), passes_run=2)
+    residue, ledger = phase_e(list(data.txns), list(data.bank_lines),
+                              list(data.orders), ladder)
+    text = render(report, truth, ladder,
+                  anchors, at_risk, "data/runs/seed42", residue, ledger)
     assert "precision" in text and "AMBIGUOUS_SUBSET" in text
     assert "anchors recovered 93" in text
 
