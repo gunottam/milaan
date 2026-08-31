@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 
 from core.models import net_contribution, target
+from generator.config import UNIQUENESS_NODE_BUDGET_OFFLINE
 from generator.entities import build
 from generator.generate import build_truth, emit
 
@@ -86,7 +87,8 @@ def test_truth_is_json_and_carries_the_run_config(tmp_path):
     assert truth["seed"] == 42
     assert truth["generated_at"] == STAMP
     assert truth["config"] == {"payouts": 24, "bank_lines": 24, "records": 400,
-                               "noise": "high", "window_days": 2}
+                               "noise": "high", "window_days": 2,
+                               "uniqueness_node_budget": UNIQUENESS_NODE_BUDGET_OFFLINE}
     assert len(truth["bank_lines"]) == 24
 
 

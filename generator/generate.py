@@ -87,9 +87,14 @@ def build_truth(data: Dataset, seed: int, noise: str, window_days: int,
     return {
         "seed": seed,
         "generated_at": generated_at,
+        # The node budget is part of the run's identity, not a performance note:
+        # it decides how many lines truth can call `verified` rather than
+        # `unproven`, so two truth files at different budgets describe the same
+        # CSVs with different confidence and their bucket sizes do not compare.
         "config": {"payouts": payouts if payouts is not None else len(data.settlements),
                    "bank_lines": len(data.bank_lines), "records": len(data.txns),
-                   "noise": noise, "window_days": window_days},
+                   "noise": noise, "window_days": window_days,
+                   "uniqueness_node_budget": budget},
         "bank_lines": records,
         "settlements": settlement_notes or {},
         "orders": {t.order_id: {"linked_payment": t.entity_id}

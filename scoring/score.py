@@ -26,6 +26,7 @@ from pathlib import Path
 
 from core.models import BankLine, GatewayTxn, Order, read_csv
 from core.money import fmt_inr
+from generator.config import UNIQUENESS_NODE_BUDGET_OFFLINE
 from matcher.run import run_ladder
 
 # Bucket -> what sits in it, and why it is not in the headline.
@@ -118,14 +119,32 @@ def score(truth: Mapping, matched: Mapping[str, Iterable[str]]) -> Report:
     # Per-break recall (§11). `injected` counts injections and stays untouched;
     # `lines` counts bank lines carrying the code, and they differ on purpose —
     # SETTLEMENT_CONTAMINATION breaks two lines per injection, NET_ZERO_SETTLEMENT
-    # and ORPHAN_ORDER break none at all. Caught is "this line was scored right",
-    # so a correct refusal on an unresolvable line counts as caught.
+    # and ORPHAN_ORDER break none at all.
+    #
+    # Caught splits two ways and the split is not cosmetic. `caught_by_match` is a
+    # composition proved to the paisa. `caught_by_refusal` is a line truth calls
+    # unresolvable that nothing proposed — which scores identically and can be
+    # earned by having no rule at all. `DUPLICATE_CREDIT` is the live case: §3.2's
+    # reversal-pair rule is unimplemented, so every one of its lines is a green.
+    # A table that reported one number would show six greens for code that does
+    # not exist, and stage 14's regression would carry that forward silently.
     manifest = {}
     for code, entry in truth["break_manifest"].items():
         lines = carrying(code)
-        caught = sum(outcomes[bid] in ("TP", "TN") for bid in lines)
-        manifest[code] = {**entry, "lines": len(lines),
-                          "caught": caught, "missed": len(lines) - caught}
+        by_match = sum(outcomes[bid] == "TP" for bid in lines)
+        by_refusal = sum(outcomes[bid] == "TN" for bid in lines)
+        manifest[code] = {
+            **entry, "lines": len(lines),
+            "caught": by_match + by_refusal,
+            "missed": len(lines) - by_match - by_refusal,
+            "caught_by_match": by_match, "caught_by_refusal": by_refusal,
+            # Every green earned by refusing. Correct for WITHHELD_RECORD, where
+            # refusal is §5's required outcome; unearned for DUPLICATE_CREDIT,
+            # where it is the absence of a rule. Scoring cannot tell those apart —
+            # exception typing is stage 10 — so it flags both and names neither.
+            "scored_by_refusal": by_match == 0 and by_refusal > 0,
+            "no_bank_line": not lines,
+        }
 
     emergent = {}
     for code, entry in truth["emergent_breaks"].items():
@@ -177,6 +196,31 @@ def _rule(char: str = "─", width: int = 78) -> str:
     return char * width
 
 
+def budget_banner(truth: Mapping) -> list[str]:
+    """The node budget truth was verified at, and a loud line when it is not the
+    offline one.
+
+    §10.1: the budget is not a performance knob, it is what decides whether the
+    uniqueness guarantee holds. Two truth files at different budgets describe the
+    same CSVs — the matcher cannot tell them apart — but call different lines
+    `verified`, `unproven` and `AMBIGUOUS_SUBSET`. Comparing a recall figure across
+    that boundary compares two different denominators, and the difference looks
+    exactly like a regression.
+    """
+    budget = truth["config"].get("uniqueness_node_budget")
+    if budget is None:
+        return ["  !! truth records no node budget — written before stage 7.",
+                "     Nothing here is comparable with any other run. Regenerate."]
+    line = f"  uniqueness verified at {budget:,} nodes"
+    if budget == UNIQUENESS_NODE_BUDGET_OFFLINE:
+        return [line + "  (the offline budget — comparable)"]
+    return [line,
+            f"  !! NOT the {UNIQUENESS_NODE_BUDGET_OFFLINE:,} offline budget. The "
+            f"unproven and emergent buckets are",
+            "     sized by this number, so these counts do not compare with an "
+            "offline run."]
+
+
 def render(report: Report, truth: Mapping, matched: Mapping, trace: Sequence[Mapping],
            anchors: Mapping, at_risk: Mapping[str, int], run: Path) -> str:
     """The scoreboard. Headline first, then everything held out of it by name."""
@@ -192,7 +236,7 @@ def render(report: Report, truth: Mapping, matched: Mapping, trace: Sequence[Map
            f"(true anchor present {anchors['true_anchor_present']}, "
            f"wrong {anchors['wrong']}, no true anchor {anchors['no_true_anchor']}) "
            f"· lines closed {len(matched)}",
-           ""]
+           *budget_banner(truth), ""]
 
     head = report.counts("headline")
     out += [f"HEADLINE — {BUCKETS['headline']}", _rule(),
@@ -220,25 +264,32 @@ def render(report: Report, truth: Mapping, matched: Mapping, trace: Sequence[Map
                 "    a refusal here is the only evidence G5 works; a match here is "
                 "fabricated", ""]
 
-    out += ["PER-BREAK — caught is TP on a resolvable line, TN on an unresolvable one",
-            _rule(),
-            f"  {'code':<26}{'injected':>9}{'lines':>7}{'caught':>8}{'missed':>8}"
-            f"{'recall':>9}   at risk"]
+    out += ["PER-BREAK — match is a composition proved; refuse is a line truth calls "
+            "unresolvable", _rule(width=92),
+            f"  {'code':<26}{'inj':>5}{'lines':>6}{'match':>6}{'refuse':>7}"
+            f"{'recall':>9}{'at risk':>16}  note"]
     for code, entry in sorted(report.break_manifest.items()):
         r = entry["caught"] / entry["lines"] if entry["lines"] else None
         risk = sum(at_risk.get(bid, 0) for bid in
                    sorted(bid for bid, rec in truth["bank_lines"].items()
                           if code in rec["injected_breaks"]
                           and report.outcomes[bid] in ("FN", "FP")))
-        out.append(f"  {code:<26}{entry['injected']:>9}{entry['lines']:>7}"
-                   f"{entry['caught']:>8}{entry['missed']:>8}{_pct(r):>9}   "
-                   f"{fmt_inr(risk) if risk else '—'}")
-    out += ["    NET_ZERO_SETTLEMENT and ORPHAN_ORDER produce no bank line: "
-            "0 of 0 is not recall",
-            "    DUPLICATE_CREDIT is caught by having no rule — §3.2's reversal pair "
-            "is unimplemented,",
-            "    truth marks both halves unresolvable, and refusing them scores TN. "
-            "It will get harder."]
+        note = ("no bank line" if entry["no_bank_line"]
+                else "refusal-only" if entry["scored_by_refusal"] else "")
+        out.append(f"  {code:<26}{entry['injected']:>5}{entry['lines']:>6}"
+                   f"{entry['caught_by_match']:>6}{entry['caught_by_refusal']:>7}"
+                   f"{_pct(r):>9}{fmt_inr(risk) if risk else '—':>16}  {note}".rstrip())
+    out += ["    no bank line   the break creates none, so 0 of 0 is not recall: "
+            "NET_ZERO_SETTLEMENT",
+            "                   produces no payout (§5.1), ORPHAN_ORDER is the §3.3 "
+            "order tie-out.",
+            "    refusal-only   every green came from refusing a line truth calls "
+            "unresolvable, not",
+            "                   from composing one. Required for WITHHELD_RECORD "
+            "(§5). Unearned for",
+            "                   DUPLICATE_CREDIT: §3.2's reversal-pair rule does not "
+            "exist, and its",
+            "                   absence scores the same as its success."]
     return "\n".join(out)
 
 
@@ -267,6 +318,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         args.json.write_text(json.dumps({
             "run": str(args.run), "seed": truth["seed"],
+            # Carried into the report so a regression table can refuse to compare
+            # two runs verified at different budgets (§10.1).
+            "uniqueness_node_budget":
+                truth["config"].get("uniqueness_node_budget"),
             "closed": len(matched), "bank_lines": len(bank_lines),
             "outcomes": report.outcomes, "buckets": report.buckets,
             "break_manifest": report.break_manifest,

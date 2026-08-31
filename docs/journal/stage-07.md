@@ -4,7 +4,7 @@ Written for someone who knows `docs/spec.md` and has not read the code.
 
 Spec sections read: **§11** (scoring), plus stage 4's deferred list and §9.1's amendment.
 
-`pytest -q`: **134 passed, 0 skipped.** Twenty-two are new.
+`pytest -q`: **139 passed, 0 skipped.** Twenty-seven are new.
 
 ```
 $ python -m scoring.score --run data/runs/seed42
@@ -14,6 +14,7 @@ MILAAN — scoreboard    data/runs/seed42    seed 42  noise high
   134 bank lines · 3009 transactions · 64 closed · 70 open
   by tier   A1 40  A2 0  A3 4  B1 16  B2 4
   anchors recovered 93 (true anchor present 71, wrong 0, no true anchor 22) · lines closed 64
+  uniqueness verified at 40,000,000 nodes  (the offline budget — comparable)
 
 HEADLINE — verified-unique lines, plus refusals on lines nobody rigged
 ──────────────────────────────────────────────────────────────────────────────
@@ -52,6 +53,50 @@ partitions into two tiers that do not yet exist, in a known ratio, with no resid
 of "we do not know why this failed". That is a better thing to have measured than a higher
 number.
 
+### The prediction, recorded before stage 8 is written
+
+Because the gap is known rather than residual, the endpoint is predictable. Writing it down
+now is the point: a number predicted from stage-7 measurements and then hit is evidence the
+system is understood, and one that is missed is evidence worth more than the number would have
+been.
+
+**Prediction 1 — C1 alone takes headline recall to ~89%.** The 25 anchored FN need no
+identifier work and no search over an unknown pool: the settlement is known, so C1 seeds it and
+searches only the residual, which is one or two cross-cycle strays. Closing all 25:
+
+```
+  headline now      TP 57   FP 0   FN 35   TN 13     recall 62.0%
+  headline after    TP 82   FP 0   FN 10   TN 13     recall 89.1%      <- prediction
+```
+
+**Prediction 2 — the remaining 10 are Pass A's, and 2 of them are Pass A's alone.** All ten
+have no recoverable identifier. Eight have their true composition inside the window pool, so
+C2 could in principle reach them; two do not — `TIMING_SHIFT` and `ONHOLD_RELEASE` put a member
+outside the window, and §9.3 is explicit that only an anchor makes membership a fact rather
+than an inference. No amount of unanchored search reaches those two.
+
+**Prediction 3 — C2 will attempt all 35 and close few.** Every one of these lines has a window
+pool of 23–32, under `C2_MAX_POOL = 35`, so C2 does not refuse them by rule. Stage 4's
+pigeonhole finding says what happens instead: at a pool of ~28 over a ~₹3 lakh spread there are
+vastly more subsets than attainable sums, so most targets have several representations and G5
+refuses. **The expected C2 outcome on this data is refusals, not closures** — visible as a jump
+in G5 refusals with recall barely moving. If C2 closes a large share of the 35 instead, stage
+4's finding is wrong and should be revisited rather than quietly enjoyed.
+
+**What that does to the pitch's ablation claim.** The original pitch guessed 71% deterministic
+→ 94% with the agent. The measured shape is different and less flattering to the model:
+deterministic gets to about **89%**, and the model's territory is the last ten lines, ~11
+points, of which two are reachable by nothing else. §9.1's amendment already said the ablation
+delta understates Pass A because its recall books as C1 closures under a deterministic tier —
+this is that effect sized before the detective exists. The honest claim is *"deterministic
+reconciliation gets to ~89%; the model recovers identifiers on the lines where the narration
+was destroyed, and C1 does the arithmetic."*
+
+**Two things that will move these numbers and are not being predicted.** Stage 9 replaces the
+single-pass ladder with tier-major ordering and two propagation passes, and assignment is
+greedy (§9.9) — a C1 closure consumes transactions another line needed. Read 89.1% as the
+prediction for C1's reach, not as a forecast of the stage-9 board.
+
 ### What precision at 100% does and does not say
 
 Zero false positives across all 134 lines, including the 16 `AMBIGUOUS_SUBSET` lines where a
@@ -67,14 +112,39 @@ saying that would be setting up a regression to look like a failure.
 
 ### Two numbers that flatter the agent, named rather than left to be found
 
-- **`DUPLICATE_CREDIT` scores 6 of 6 caught, by having no rule.** §3.2's reversal-pair
-  detection is unimplemented; truth marks both halves `resolvable: false`; refusing them scores
-  TN. Stage 4 flagged this and it is now visible on the scoreboard, which prints the sentence
-  under the per-break table rather than in a document nobody opens at demo time.
-- **`NET_ZERO_SETTLEMENT` and `ORPHAN_ORDER` produce no bank line at all** — 2 and 6
-  injections, 0 lines each. Their per-break recall is `—`, not 0% and not 100%. §5.1's whole
+A caveat under a table is not enough — a regression table two stages from now will show a green
+and nobody will read the caveat. So the manifest carries the distinction as data, and the board
+prints it as a column:
+
+```
+  code                        inj lines match refuse   recall         at risk  note
+  DUPLICATE_CREDIT              3     6     0      6   100.0%               —  refusal-only
+  WITHHELD_RECORD               4     4     0      4   100.0%               —  refusal-only
+  TIMING_SHIFT                  6     6     0      1    16.7%    ₹3,49,640.61  refusal-only
+  NET_ZERO_SETTLEMENT           2     0     0      0        —               —  no bank line
+  ORPHAN_ORDER                  6     0     0      0        —               —  no bank line
+```
+
+`caught` now splits into **`caught_by_match`** — a composition proved to the paisa — and
+**`caught_by_refusal`** — a line truth calls unresolvable that nothing proposed. Both score
+identically under §11 and only one of them is a rule doing work.
+
+- **`DUPLICATE_CREDIT` scores 6 of 6, entirely by refusing.** §3.2's reversal-pair detection is
+  unimplemented; truth marks both halves `resolvable: false`; refusing them scores TN. **The
+  absence of the rule scores exactly as well as its success would.**
+- **`WITHHELD_RECORD` is also refusal-only, and that one is correct.** §5 says it must remain an
+  exception; there is nothing to compose. Scoring cannot tell the two cases apart — that needs
+  exception typing, which is stage 10 — so `scored_by_refusal` flags both and the footnote names
+  which is which. A flag that silently forgave `WITHHELD_RECORD` would be a judgement encoded in
+  the scorer.
+- **`TIMING_SHIFT` reads 16.7% and its one caught line is a refusal.** The split turns that row
+  from "nearly all missed" into "not one composition proved" — a stronger and more useful
+  statement, and it is only visible because match and refuse are separate columns.
+- **`NET_ZERO_SETTLEMENT` and `ORPHAN_ORDER` produce no bank line at all** — 2 and 6 injections,
+  0 lines each, flagged `no_bank_line`. Their recall is `—`, not 0% and not 100%: §5.1's whole
   point is that a net-zero settlement has no payout to reconcile, and `ORPHAN_ORDER` is §3.3's
-  order tie-out, which is stage 10's.
+  order tie-out, which is stage 10's. A dash alone reads as a miss; the flag says why there is
+  nothing there.
 
 ---
 
@@ -128,32 +198,33 @@ are the **true-negative class**: 16 refusals on data nobody rigged is the only e
 anything. Folding them into the headline would raise TN to 29 and make precision look better
 for a reason that has nothing to do with precision.
 
-### Per-break recall, and `injected` ≠ `lines`
+### Per-break recall, and three numbers that are not one number
 
-`break_manifest`'s `caught` and `missed` are filled per **bank line**, not per injection, and
-the table prints both counts because they differ on purpose:
+`break_manifest`'s `caught` and `missed` are filled per **bank line**, not per injection:
 
 ```
-  code                       injected  lines  caught  missed   recall   at risk
-  TIMING_SHIFT                      6      6       1       5    16.7%   ₹3,49,640.61
-  SETTLEMENT_CONTAMINATION          3      6       3       3    50.0%   ₹2,62,321.17
-  ONHOLD_RELEASE                    4      8       7       1    87.5%   ₹44,570.29
-  SPLIT_PAYOUT                      3      6       0       6     0.0%   ₹1,74,891.40
-  NET_ZERO_SETTLEMENT               2      0       0       0        —   —
+  code                        inj lines match refuse   recall         at risk  note
+  TIMING_SHIFT                  6     6     0      1    16.7%    ₹3,49,640.61  refusal-only
+  SETTLEMENT_CONTAMINATION      3     6     0      3    50.0%    ₹2,62,321.17  refusal-only
+  ONHOLD_RELEASE                4     8     5      2    87.5%      ₹44,570.29
+  SPLIT_PAYOUT                  3     6     0      0     0.0%    ₹1,74,891.40
+  NET_ZERO_SETTLEMENT           2     0     0      0        —               —  no bank line
 ```
 
-One `SETTLEMENT_CONTAMINATION` injection breaks two lines (stage 4). One `SPLIT_PAYOUT`
-injection makes two halves. `ONHOLD_RELEASE` reads 8 lines against 4 injections because two of
-its lines also carry `AMBIGUOUS_SUBSET`, which the generator records on the line. A single
-number would have had to pick one of these to be wrong about.
+`inj` counts injections; `lines` counts bank lines carrying the code. One
+`SETTLEMENT_CONTAMINATION` injection breaks two lines (stage 4). One `SPLIT_PAYOUT` injection
+makes two halves. `ONHOLD_RELEASE` reads 8 lines against 4 injections because two of its lines
+also carry `AMBIGUOUS_SUBSET`, which the generator records on the line. A single number would
+have had to pick one of these to be wrong about.
 
-`caught` means **this line was scored right**: TP on a resolvable line, TN on an unresolvable
-one. A correct refusal is a caught break — that is what §5 means by `WITHHELD_RECORD` being
-detected, since there is nothing else to do with it.
+`match` and `refuse` are the two ways a line is scored right, and separating them is what stops
+the table rewarding absent code — the section above. It also sharpens rows that were merely
+bad: `SETTLEMENT_CONTAMINATION` at 50% has composed **nothing**; its three greens are the three
+lines truth calls unresolvable, and the three the break leaves merely flagged are all missed.
 
-`at risk` is the signed bank amount of the lines the code got wrong, so the table sorts by
-consequence rather than by count. `TIMING_SHIFT` at 16.7% is the largest exposure on the board
-and it is one tier away from closing.
+`at risk` is the bank amount of the lines the code got wrong, so the table reads by consequence
+rather than by count. `TIMING_SHIFT` is the largest exposure on the board — ₹3.5 lakh across six
+lines, none of them composed — and it is one tier away from closing.
 
 ### `matcher/run.py` — moved, not written
 
@@ -174,26 +245,48 @@ is pure domain logic over `BankLine` and `GatewayTxn` and `matcher/` importing `
 the wrong direction.
 
 `read_csv` is the inverse of `generate._cell`, ~15 lines, and it is why the scoreboard reads
-`data/runs/seed42/` rather than regenerating. That matters: the committed run was verified at
-the 40M offline node budget, and regenerating at the live budget produces a *different truth
-file* — 15 lines `unproven` instead of 3, 8 ambiguous instead of 16. Same CSVs, same matcher
-behaviour, different confidence about them. Scoring the artifact is the only way the number on
-the board is the number the dataset was described with.
+`data/runs/seed42/` rather than regenerating. That matters — see the next section.
 
 A test round-trips both CSVs through `emit()` and asserts equality with the dataclasses that
 wrote them. A column parsed to the wrong type is a silently different dataset.
 
+### The node budget is part of the run's identity
+
+`truth.json`'s config now records `uniqueness_node_budget`, the scoreboard prints it under the
+header, and it prints a `!!` banner when it is not the offline budget.
+
+This is not bookkeeping. §10.1 is explicit that the budget is not a performance knob — it
+decides whether the uniqueness guarantee holds, which decides how many lines truth calls
+`verified` rather than `unproven`, which decides the denominators. Two truth files at 2M and
+40M describe **the same CSVs**, and the matcher cannot tell them apart:
+
+```
+  40,000,000 nodes    verified 92   unproven  3   ambiguous 16     headline 105 lines
+   2,000,000 nodes    verified 80   unproven 15   ambiguous  8     headline 101 lines
+```
+
+Twelve lines move between `unproven` and `verified`, eight between `emergent` and the rest.
+Recall computed across that boundary compares two different denominators and the difference
+looks exactly like a regression — which is the shape of bug that costs an evening in stage 8
+while the matcher is being changed constantly. Recording the budget is two lines in the
+generator; the banner is ten in the scoreboard, and `report.json` carries the number so stage
+14's regression table can refuse to compare runs that are not comparable.
+
+Three tests cover it: the offline budget says so quietly, any other budget says so loudly, and
+a truth file predating this stage is comparable with nothing.
+
 ### `tests/test_scoring.py` — §11
 
-Twenty-two tests. Each of TP, FP, FN and TN is asserted on a hand-built truth record, because
+Twenty-seven tests. Each of TP, FP, FN and TN is asserted on a hand-built truth record, because
 a scorer measured only against a run it agrees with is a scorer nobody has checked. FP gets
 three cases — one element swapped, one missing, one extra — since I5 is the invariant that a
 composition right about twenty-eight transactions and wrong about one is a false match.
 
 The seed-42 cases run at the **2M** budget rather than the committed 40M one, so the suite
-stays under 30 seconds. Their bucket sizes are therefore smaller than the scoreboard's and the
-fixture says so; what they pin is FP = 0, the buckets partitioning all 134 lines, and TP summing
-to lines closed.
+stays under 30 seconds. The fixture asserts that budget rather than assuming it — every bucket
+size below it is a function of the number, so a change to it should break loudly rather than
+shift the pinned counts. What those cases pin is FP = 0, the buckets partitioning all 134 lines,
+and TP summing to lines closed.
 
 ---
 
@@ -233,11 +326,12 @@ table is the part of §11 that was measurable this stage.
 accounting is stage 12, the ten-seed regression is stage 14. Every number in this file is a
 single-seed measurement.
 
-**The 2M / 40M split is a trap waiting to be stepped in.** The scoreboard's numbers and the
-test suite's numbers come from two different truth files for the same CSVs, and only the fixture
-docstring says so. Stage 14's regression harness should pin one budget for everything published;
-until then, a number quoted from the wrong one is off by twelve lines in the `unproven` bucket
-and eight in `emergent`.
+**The 2M / 40M split is disclosed, not removed.** The scoreboard scores the committed 40M
+artifact and the test suite regenerates at 2M so the suite stays under 30 seconds. The budget
+is now recorded in truth, printed on the board, carried into `report.json` and asserted in the
+fixture — so a number from the wrong one announces itself instead of being chased. What is
+still deferred is picking **one** budget for everything published, which is stage 14's call
+when the regression harness decides what it is regressing against.
 
 **Precision has not been tested against a tier that can be wrong.** Phase A and B propose whole
 settlement groups; G3 has fired once across two stages. The 100% is real and it is also

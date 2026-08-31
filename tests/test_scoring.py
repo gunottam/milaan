@@ -12,10 +12,11 @@ from collections import Counter
 import pytest
 
 from core.models import BANK_COLUMNS, BankLine, GatewayTxn, read_csv
+from generator.config import UNIQUENESS_NODE_BUDGET_OFFLINE
 from generator.generate import emit, generate
 from matcher.run import run_ladder
-from scoring.score import (BUCKETS, anchors_recovered, bucket, outcome,
-                           precision, recall, render, score)
+from scoring.score import (BUCKETS, anchors_recovered, bucket, budget_banner,
+                           outcome, precision, recall, render, score)
 
 STAMP = "2026-08-24T15:30:00+05:30"
 
@@ -26,8 +27,10 @@ UNRESOLVABLE = {"resolvable": False, "composition": None,
 
 
 def truth_of(**lines) -> dict:
-    return {"seed": 42, "config": {"bank_lines": len(lines), "records": 0,
-                                   "noise": "high", "window_days": 2},
+    return {"seed": 42,
+            "config": {"bank_lines": len(lines), "records": 0, "noise": "high",
+                       "window_days": 2,
+                       "uniqueness_node_budget": UNIQUENESS_NODE_BUDGET_OFFLINE},
             "bank_lines": lines, "break_manifest": {}, "emergent_breaks": {}}
 
 
@@ -138,7 +141,40 @@ def test_break_manifest_caught_and_missed_are_filled_per_line():
     # Two injections, three lines: `injected` counts injections and is untouched.
     # bl_1 matched (TP) and bl_3 was correctly refused (TN) — both caught.
     assert report.break_manifest["TIMING_SHIFT"] == {
-        "injected": 2, "lines": 3, "caught": 2, "missed": 1}
+        "injected": 2, "lines": 3, "caught": 2, "missed": 1,
+        "caught_by_match": 1, "caught_by_refusal": 1,
+        "scored_by_refusal": False, "no_bank_line": False}
+
+
+def test_a_break_caught_only_by_refusing_is_flagged():
+    """The metric a missing rule can win. §3.2's reversal-pair detection does not
+    exist, truth marks both halves of a DUPLICATE_CREDIT unresolvable, and refusing
+    them scores exactly as well as detecting them would. The flag is what stops
+    stage 14's regression table showing greens for code nobody wrote."""
+    truth = truth_of(bl_1=UNRESOLVABLE, bl_2=UNRESOLVABLE)
+    truth["break_manifest"] = {"DUPLICATE_CREDIT": {"injected": 1}}
+    for rec in truth["bank_lines"].values():
+        rec["injected_breaks"] = ["DUPLICATE_CREDIT"]
+    entry = score(truth, {}).break_manifest["DUPLICATE_CREDIT"]
+    assert entry["caught"] == 2 and entry["caught_by_match"] == 0
+    assert entry["scored_by_refusal"] is True
+
+    # One composed match is enough to stop being refusal-only.
+    truth["bank_lines"]["bl_2"] = {**RESOLVABLE,
+                                   "injected_breaks": ["DUPLICATE_CREDIT"]}
+    entry = score(truth, {"bl_2": ("pay_1", "pay_2")}).break_manifest["DUPLICATE_CREDIT"]
+    assert entry["caught_by_match"] == 1 and entry["scored_by_refusal"] is False
+
+
+def test_a_break_with_no_bank_line_is_flagged_rather_than_scored_zero():
+    """§5.1: a net-zero settlement produces no payout and therefore no bank line,
+    ever. Nothing to catch and nothing to miss — 0 of 0 is not 0% recall."""
+    truth = truth_of(bl_1=RESOLVABLE)
+    truth["break_manifest"] = {"NET_ZERO_SETTLEMENT": {"injected": 2}}
+    entry = score(truth, {}).break_manifest["NET_ZERO_SETTLEMENT"]
+    assert entry == {"injected": 2, "lines": 0, "caught": 0, "missed": 0,
+                     "caught_by_match": 0, "caught_by_refusal": 0,
+                     "scored_by_refusal": False, "no_bank_line": True}
 
 
 def test_emergent_breaks_split_refused_from_matched():
@@ -174,6 +210,33 @@ def test_anchors_are_reported_beside_closures_and_a_wrong_one_is_named():
     assert got["no_true_anchor"] == 1     # bl_4 has no composition to be right about
 
 
+# --- the node budget is part of the run's identity ---------------------------
+
+
+def test_a_truth_file_at_the_offline_budget_says_so_quietly():
+    assert budget_banner(truth_of()) == \
+        [f"  uniqueness verified at {UNIQUENESS_NODE_BUDGET_OFFLINE:,} nodes  "
+         "(the offline budget — comparable)"]
+
+
+def test_a_truth_file_at_any_other_budget_says_so_loudly():
+    """§10.1: the budget decides whether the uniqueness guarantee holds, so it
+    decides how many lines truth calls `verified` rather than `unproven`. The CSVs
+    and the matcher are identical across the boundary and the buckets are not —
+    which makes a budget change look exactly like a regression."""
+    truth = truth_of()
+    truth["config"]["uniqueness_node_budget"] = 2_000_000
+    banner = budget_banner(truth)
+    assert "2,000,000" in banner[0]
+    assert banner[1].startswith("  !! NOT the 40,000,000 offline budget")
+
+
+def test_a_truth_file_with_no_budget_recorded_is_comparable_with_nothing():
+    truth = truth_of()
+    del truth["config"]["uniqueness_node_budget"]
+    assert budget_banner(truth)[0].startswith("  !! truth records no node budget")
+
+
 # --- seed 42 -----------------------------------------------------------------
 
 
@@ -184,6 +247,10 @@ def baseline():
     # committed run's. The CSVs are the same bytes and the matcher sees no
     # difference — only truth's confidence about them changes.
     data, truth = generate(42, 120, 3000, "high", 2, STAMP, 2_000_000)
+    # Pinned, not incidental: every bucket size below is a function of it, and the
+    # scoreboard's committed run uses the 40M offline budget. `budget_banner` is
+    # what says so at the top of the board.
+    assert truth["config"]["uniqueness_node_budget"] == 2_000_000
     matched, trace = run_ladder(data.txns, data.bank_lines)
     compositions = {bid: claim.composition for bid, (_, claim, _) in matched.items()}
     return data, truth, matched, trace, score(truth, compositions)
