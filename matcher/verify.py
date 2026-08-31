@@ -16,7 +16,8 @@ from typing import Literal
 from core.models import BankLine, GatewayTxn, target
 from core.money import Paise
 from core.proof import Proof, build_proof
-from matcher.gates import g1_exclusivity, g2_delta, g3_coherence, g4_tolerance
+from matcher.gates import (g1_exclusivity, g2_delta, g3_coherence, g4_outcome,
+                           g4_tolerance)
 from matcher.proposers.base import Claim
 
 
@@ -24,7 +25,18 @@ from matcher.proposers.base import Claim
 class Verdict:
     """§7.2. Every field is explicit at every construction — `delta_paise` in
     particular has no default, because I6 is that no difference is ever silently
-    absorbed, and a defaulted zero is exactly how one would be."""
+    absorbed, and a defaulted zero is exactly how one would be.
+
+    `delta_paise` is G2's residual and `tolerance` is G4's verdict on it. They are
+    separate fields because `gate="G4"` conflates two different facts: that the sum
+    did not close, and that tolerance declined to rescue it. A residual of 4 paise
+    across 3 transactions and one of ₹198 are both G4 rejections and only one is a
+    near miss — stage 10 cannot diagnose a residual it cannot see, and stage 7
+    cannot report exact against tolerance without it.
+
+    `tolerance` is `None` when G4 was never consulted: either an earlier gate
+    rejected the claim, or G2 closed exactly and there was nothing to relax.
+    """
 
     ok: bool
     gate: str | None
@@ -32,11 +44,13 @@ class Verdict:
     proof: Proof | None
     confidence: Literal["exact", "tolerance"] | None
     delta_paise: Paise
+    tolerance: Literal["applied", "over_rupee_cap", "over_per_txn_cap"] | None
 
 
-def _reject(gate: str, reason: str, delta: Paise) -> Verdict:
+def _reject(gate: str, reason: str, delta: Paise,
+            tolerance: str | None = None) -> Verdict:
     return Verdict(ok=False, gate=gate, reason=reason, proof=None,
-                   confidence=None, delta_paise=delta)
+                   confidence=None, delta_paise=delta, tolerance=tolerance)
 
 
 def check(claim: Claim, line: BankLine, txns: Mapping[str, GatewayTxn],
@@ -58,13 +72,15 @@ def check(claim: Claim, line: BankLine, txns: Mapping[str, GatewayTxn],
         return _reject("G3", reason, delta)
 
     confidence: Literal["exact", "tolerance"] = "exact"
+    outcome = None
     if delta != 0:
+        outcome = g4_outcome(claim, delta)
         reason = g4_tolerance(claim, delta)
         if reason:
-            return _reject("G4", reason, delta)
+            return _reject("G4", reason, delta, outcome)
         confidence = "tolerance"
 
     return Verdict(ok=True, gate=None, reason=None,
                    proof=build_proof(claim.bank_line_id, claim.composition, txns,
                                      target(line)),
-                   confidence=confidence, delta_paise=delta)
+                   confidence=confidence, delta_paise=delta, tolerance=outcome)

@@ -15,10 +15,27 @@ seed42: 134 bank lines, 3009 transactions
   gate rejections: G4 860   G1 450   G3 1
 ```
 
-**A wrong subset is rejected by G4, not G2.** G2 cannot reject — §7.3 sends every non-zero
-delta to G4 — so the 860 above are almost all arithmetic failures that G4 declined to absorb,
-not tolerance decisions. Stage 10's delta diagnostics will need to tell those two apart; the
-verdict currently says `G4` for both.
+**A wrong subset is rejected by G4, not G2** — G2 cannot reject, §7.3 sends every non-zero
+delta to G4. `gate="G4"` therefore said nothing about whether the sum missed by four paise or
+by ₹198, so `Verdict` now carries `tolerance` beside `delta_paise`: `applied`,
+`over_rupee_cap`, or `over_per_txn_cap`, and `None` when G4 was never consulted. One
+classification produces both the label and the reason, so they cannot disagree.
+
+With the split, the 860 read:
+
+```
+  over_rupee_cap        860      |delta| > Rs 1.00
+  over_per_txn_cap        0      within Rs 1.00, more than a paise per transaction
+  applied                 3      admitted, counted separately (Sec 8.3)
+
+  by magnitude:  <= Rs 100   4      <= Rs 10,000  136      > Rs 10,000  720
+```
+
+**Not one rejection was within ₹1.00 of closing.** G4 is the sole gate that can admit a wrong
+answer, and on this data it is nowhere near the decision boundary — 720 of the 860 miss by more
+than ₹10,000, which is a whole missing transaction, not a rounding artefact. Widening the band
+would buy no recall and would spend the one gate whose bad policy produces a false match. The
+three tolerance matches are `ROUNDING_DRIFT` and nothing else.
 
 ---
 
@@ -103,6 +120,11 @@ uniqueness guarantee has no evidence from this seed. Two tests cover it instead 
 the duplicate bucket exists in the index, one building a bank line that asks for it and
 asserting the refusal.
 
+**Both tests stay permanently**, including the constructed one, and including the assertion
+that seed 42's bucket exists. The ambiguity rate is a property of the modelled merchant (stage
+4), so a later seed can present this case to a real bank line at any time — the path should be
+proven before that happens rather than discovered by it.
+
 ---
 
 ## Files
@@ -185,10 +207,17 @@ the anchor settlement, and G1 exempts those from the window test (§9.3, stage 5
 would assert a window that is never consulted. B2's claims carry the real window, because a
 lone transaction has no anchor and G1 does apply it.
 
-**One G3 rejection, at B2.** A single transaction that is a member of a multi-item settlement
-is a partial slice, and the coherence prior refuses it — correctly. It is the only G3 rejection
-in the run, and it is the prior costing nothing here because the arithmetic would have failed
-anyway.
+**G3 is unexercised, not working.** It fired exactly once in the run — a B2 single that was a
+member of a multi-item settlement, refused as a partial slice — and one firing is not coverage.
+Phase A and B1 propose whole settlement groups **by construction**, so nothing incoherent is
+reachable from those tiers; the coherence prior has had nothing to prove itself against. C2 in
+stage 8 is the first tier that proposes arbitrary subsets, and it is the first real test of
+§9.4.
+
+`tests/test_gates.py::test_g3_rejects_a_composition_spanning_three_partial_settlements` builds
+the case by hand: one slice from each of three settlements, summing to the bank credit exactly,
+rejected on shape with `delta_paise == 0`. The path is proven before the tier that needs it
+exists. Read the run's "G3 1" as *not yet measured*, not as *passing*.
 
 ## Deferred
 
@@ -218,3 +247,20 @@ deliberately.
 magnitude, opposite sign, adjacent day, similar narration) is a matcher rule and nothing
 implements it. Both halves are `resolvable: false` in truth, so they currently score as correct
 refusals — which flatters the number, and will keep flattering it until the rule lands.
+
+---
+
+## Amended after the fact
+
+Three changes made after the stage was first written, none of them new behaviour:
+
+1. **`Verdict.tolerance`** splits G2's residual from G4's verdict on it, so a rejection says
+   both what the sum missed by and whether tolerance was close. The measured answer on seed 42
+   — never close — is in the finding above. `matcher/uniqueness.py`'s G5 refusal sets it to
+   `None`: G4's outcome belongs to a claim and that refusal belongs to a set.
+2. **G3 recorded as unexercised** rather than working, with a hand-built three-settlement
+   rejection in `tests/test_gates.py`.
+3. **`docs/spec.md` §9.1 amended** with the anchors-not-compositions measurement, and with the
+   consequence for stage 12: Pass A's recall lands as C1 closures under a deterministic tier,
+   so the ablation delta is a floor on Pass A's value rather than a measure of it. Anchors
+   recovered has to be reported next to lines closed or the model looks less useful than it is.

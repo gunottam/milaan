@@ -44,5 +44,7 @@ def resolve(passing: Sequence[tuple[Claim, Verdict]]
             proof=None, confidence=None,
             # The magnitude the finalists tied at — the only figure common to them.
             delta_paise=best,
+            # G4's outcome belongs to a claim, and this refusal belongs to a set.
+            tolerance=None,
         )
     return finalists[0]

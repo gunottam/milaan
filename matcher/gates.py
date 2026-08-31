@@ -95,16 +95,38 @@ def g3_coherence(claim: Claim, txns: Mapping[str, GatewayTxn]) -> str | None:
             "not the shape of a payout")
 
 
+def g4_outcome(claim: Claim, delta: Paise) -> str:
+    """Which of §8.2's two caps decided, as a label.
+
+    `gate="G4"` alone cannot distinguish "the sum missed by ₹198" from "the sum
+    missed by 4 paise across 3 transactions". Both are rejections and only the
+    second is a near miss, so the label is recorded on the verdict beside the
+    residual rather than folded into the gate name.
+
+    - `applied`         within both caps; G4 admitted the claim
+    - `over_rupee_cap`  outside ₹1.00 — not a rounding artefact by any reading
+    - `over_per_txn_cap` within ₹1.00 but more than one paise per transaction
+    """
+    if abs(delta) > TOLERANCE_PAISE:
+        return "over_rupee_cap"
+    if abs(delta) > len(claim.composition):
+        return "over_per_txn_cap"
+    return "applied"
+
+
 def g4_tolerance(claim: Claim, delta: Paise) -> str | None:
     """§8.2's double cap, applied only when G2 came up non-zero.
 
     The sole non-monotonic gate: every other gate can only cost recall, this one
     can admit a wrong answer. Both conditions, never either — ₹0.87 across three
     transactions is within ₹1 and is still a wrong subset, not rounding.
+
+    The reason and the label come from one classification, so they cannot disagree.
     """
-    if abs(delta) > TOLERANCE_PAISE:
-        return f"delta of {delta} paise exceeds the {TOLERANCE_PAISE} paise tolerance"
-    if abs(delta) > len(claim.composition):
-        return (f"delta of {delta} paise over {len(claim.composition)} transactions "
-                "is more than one paise each; that is a wrong subset, not rounding")
+    match g4_outcome(claim, delta):
+        case "over_rupee_cap":
+            return f"delta of {delta} paise exceeds the {TOLERANCE_PAISE} paise tolerance"
+        case "over_per_txn_cap":
+            return (f"delta of {delta} paise over {len(claim.composition)} transactions "
+                    "is more than one paise each; that is a wrong subset, not rounding")
     return None

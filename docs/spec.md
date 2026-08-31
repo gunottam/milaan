@@ -486,6 +486,23 @@ integrity check on the identifier — a wrong ID means the wrong set was grabbed
 the line drops. One test instead of two, and it catches garbled IDs, missing transactions,
 wrong settlements and hallucinated hints identically.
 
+**Amendment, measured at stage 6 (seed 42, 134 lines).** Phase A recovered a settlement id on
+**93 lines and closed 44** — with **zero wrong anchors**: wherever a fragment resolved, the
+true settlement was among the candidates. The gap is not parsing. A payout is a settlement
+group *plus* whatever cross-cycle items it nets, so the group's own total is the bank credit
+only when the payout nets nothing extra. **Phase A's product is an anchor, not a composition,**
+and A3's real job is unlocking C1's anchored residual search rather than closing lines itself.
+
+Two consequences the rest of the document should be read against:
+
+- **Identifier recovery is on the critical path, not an optimisation ahead of search.** C1
+  cannot start without an anchor and C2 refuses above `C2_MAX_POOL`, so a line with no
+  recoverable identifier has no tier that can answer it.
+- **The ablation number will understate Detective Pass A.** Pass A recovers identifiers, and
+  the recall it enables is booked as C1 closures, under a deterministic tier. Ablating the
+  model removes the anchor and the C1 closure disappears with it — so read the ablation delta
+  as Pass A's floor, and report anchors recovered alongside lines closed.
+
 ### 9.2 Phase B — amount lookup, O(1) amortised
 
 | Tier | Method |

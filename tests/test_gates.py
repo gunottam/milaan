@@ -13,7 +13,7 @@ import pytest
 
 from core.models import BankLine, GatewayTxn
 from matcher.gates import (MAX_WINDOW_OVERRIDE_DAYS, TOLERANCE_PAISE, g1_exclusivity,
-                           g2_delta, g3_coherence, g4_tolerance)
+                           g2_delta, g3_coherence, g4_outcome, g4_tolerance)
 from matcher.proposers.base import Claim
 from matcher.uniqueness import resolve
 from matcher.verify import check
@@ -118,7 +118,7 @@ def test_g2_rejects_a_delta_of_one_paise():
     assert g2_delta(c, line, TRIO) == -1
     verdict = check(c, line, TRIO)
     assert verdict.ok and verdict.confidence == "tolerance"
-    assert verdict.delta_paise == -1
+    assert verdict.delta_paise == -1 and verdict.tolerance == "applied"
 
 
 def test_g2_is_what_kills_a_clean_identifier_hit_that_does_not_balance():
@@ -127,6 +127,9 @@ def test_g2_is_what_kills_a_clean_identifier_hit_that_does_not_balance():
     verdict = check(claim("pay_1", "pay_2", "pay_3", anchor="setl_a"),
                     bank_line(20_000), TRIO)
     assert not verdict.ok and verdict.gate == "G4" and verdict.delta_paise == -19_800
+    # Not a near miss, and the verdict says which cap decided rather than leaving
+    # ₹198 and 4 paise indistinguishable behind one gate name.
+    assert verdict.tolerance == "over_rupee_cap"
 
 
 def test_g2_ignores_extra_terms():
@@ -147,7 +150,10 @@ def test_g3_rejects_partial_slices_of_three_settlements():
     assert g2_delta(c, line, txns) == 0             # it balances perfectly
     reason = g3_coherence(c, txns)
     assert reason and "spans 3 settlements" in reason
-    assert check(c, line, txns).gate == "G3"        # and is still not a match
+    verdict = check(c, line, txns)
+    assert verdict.gate == "G3"                     # and is still not a match
+    # G4 was never consulted, and the residual G2 measured is still on the record.
+    assert verdict.tolerance is None and verdict.delta_paise == 0
 
 
 def test_g3_is_the_same_function_the_oracle_applies():
@@ -164,7 +170,7 @@ def test_g4_accepts_two_paise_across_three_transactions():
     assert g4_tolerance(c, g2_delta(c, line, TRIO)) is None
     verdict = check(c, line, TRIO)
     assert verdict.ok and verdict.confidence == "tolerance"
-    assert verdict.delta_paise == -2
+    assert verdict.delta_paise == -2 and verdict.tolerance == "applied"
 
 
 def test_g4_rejects_eighty_seven_paise_across_three_transactions():
@@ -174,12 +180,25 @@ def test_g4_rejects_eighty_seven_paise_across_three_transactions():
     assert abs(delta) <= TOLERANCE_PAISE            # the first cap would admit it
     reason = g4_tolerance(c, delta)
     assert reason and "more than one paise each" in reason
-    assert check(c, line, TRIO).gate == "G4"
+    verdict = check(c, line, TRIO)
+    assert verdict.gate == "G4"
+    # Rounding-shaped in magnitude, wrong in spread — the label separates this from
+    # a residual that was never close.
+    assert verdict.tolerance == "over_per_txn_cap"
 
 
 def test_g4_rejects_a_delta_over_the_rupee_cap():
     c = claim(*[f"pay_{i}" for i in range(1, 4)])
     assert "exceeds the 100 paise tolerance" in g4_tolerance(c, 101)
+    assert g4_outcome(c, 101) == "over_rupee_cap"
+
+
+def test_the_g4_label_and_the_g4_reason_cannot_disagree():
+    """One classification produces both, so a verdict cannot say `applied` while
+    carrying a rejection reason."""
+    c = claim("pay_1", "pay_2", "pay_3")
+    for delta in (-101, -87, -3, -1, 0, 1, 3, 87, 101):
+        assert (g4_tolerance(c, delta) is None) == (g4_outcome(c, delta) == "applied")
 
 
 # --- the shapes --------------------------------------------------------------
@@ -206,6 +225,29 @@ def test_a_passing_verdict_carries_a_balanced_proof():
     assert proof.total_paise == proof.target_paise == 11_70_480
     assert [label for label, _, _ in proof.rows] == [
         "payments captured", "MDR", "GST @ 18% on MDR", "TDS @ 0.10% u/s 194-O"]
+
+
+def test_g3_rejects_a_composition_spanning_three_partial_settlements():
+    """The pre-C2 proof that the coherence path works.
+
+    G3 fired **once** in the whole stage-6 run, which is not coverage — Phase A and
+    B1 propose whole settlement groups by construction, so nothing incoherent is
+    reachable from those tiers. C2 in stage 8 is the first tier that proposes
+    arbitrary subsets, and this asserts the rejection before it exists.
+    """
+    txns = universe(
+        payment("pay_a1", 500, "setl_a"), payment("pay_a2", 700, "setl_a"),
+        payment("pay_b1", 300, "setl_b"), payment("pay_b2", 900, "setl_b"),
+        payment("pay_c1", 200, "setl_c"), payment("pay_c2", 400, "setl_c"))
+    c, line = claim("pay_a1", "pay_b1", "pay_c1"), bank_line(1_000)
+
+    assert g2_delta(c, line, txns) == 0          # one slice from each: it balances
+    verdict = check(c, line, txns)
+    assert not verdict.ok and verdict.gate == "G3"
+    assert "spans 3 settlements and 0 unassigned items" in verdict.reason
+    # Each group is left incomplete, which is the shape §9.4 refuses outright.
+    assert all(len({e for e in c.composition if txns[e].settlement_id == sid}) == 1
+               for sid in ("setl_a", "setl_b", "setl_c"))
 
 
 def test_a_rejected_verdict_still_carries_its_delta():
