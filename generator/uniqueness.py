@@ -1,94 +1,23 @@
-"""The uniqueness gate. §6.2, and the DFS of §9.3 that it and the matcher share.
+"""The uniqueness gate. §6.2.
 
-The gate runs the *same* solver the matcher will run — a solver bug that misses a
+The gate runs the *same* solver the matcher runs — a solver bug that misses a
 second solution would make the gate miss it too, asserting a uniqueness never
 established. `tests/test_subsetsum.py` is the only check that this is sound (§6.3).
 
-ponytail: `solve_exact` lives here because stage 3 is the first thing that needs
-it. Stage 8's `matcher/proposers/search_p.py` imports it from here or it moves —
-what must not happen is a second copy.
+The solver moved to `core/subsetsum.py` at stage 8, when `matcher/` became its
+second caller: `matcher/` importing `generator/` is the wrong direction, and a
+second copy is the one thing that must not happen.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 
 from core.coherence import is_plausible_payout
-from core.models import BankLine, GatewayTxn, target, window_pool
-from core.money import Paise, ist_date, window_key
+from core.models import BankLine, GatewayTxn, target
+from core.money import ist_date, window_key
+from core.subsetsum import SearchBudgetExceeded, solve_exact
 from generator.config import UNIQUENESS_NODE_BUDGET_OFFLINE
-
-
-class SearchBudgetExceeded(Exception):
-    """The tree was not exhausted, so nothing about uniqueness is known."""
-
-    def __init__(self, nodes: int, pool_size: int) -> None:
-        super().__init__(f"{nodes} nodes over a pool of {pool_size}")
-        self.nodes = nodes
-        self.pool_size = pool_size
-
-
-def _suffix_sum(pool: list[GatewayTxn], f: Callable[[Paise], Paise]) -> list[Paise]:
-    out = [0] * (len(pool) + 1)
-    for i in range(len(pool) - 1, -1, -1):
-        out[i] = out[i + 1] + f(pool[i].net)
-    return out
-
-
-def solve_exact(pool: list[GatewayTxn], target_paise: Paise, budget: int,
-                max_solutions: int = 2,
-                keep: Callable[[tuple[str, ...]], bool] | None = None
-                ) -> list[tuple[str, ...]]:
-    """Every subset of `pool` whose nets sum to the target, up to `max_solutions`.
-
-    Two solutions is all the caller ever needs — one is a match, two is a refusal —
-    so the default stops there. The property test raises the cap to compare full
-    enumerations against brute force.
-
-    `keep` filters candidates as they are found, which is §9.3's "C2 ... filtered
-    by G3". It has to run inside the search: a rejected candidate must not consume
-    the two-solution cutoff, or a coherent second solution further down the tree
-    is never reached.
-    """
-    pool = sorted(pool, key=lambda t: (-abs(t.net), t.entity_id))
-    pos = _suffix_sum(pool, lambda n: max(n, 0))
-    neg = _suffix_sum(pool, lambda n: min(n, 0))
-    solutions: list[tuple[str, ...]] = []
-    nodes = 0
-
-    def dfs(i: int, remaining: Paise, chosen: list[GatewayTxn]) -> None:
-        nonlocal nodes
-        if len(solutions) >= max_solutions:
-            return
-        nodes += 1
-        if nodes > budget:
-            raise SearchBudgetExceeded(nodes, len(pool))
-        if i >= len(pool):
-            return
-        if remaining > pos[i] or remaining < neg[i]:
-            return
-
-        # A subset is recorded when its last element is taken, so each is reported
-        # exactly once. §9.3's pseudocode instead tests `remaining == 0` on entry
-        # and returns, which is wrong twice over: the return drops every superset
-        # that adds a zero-netting group (a refund cancelling a payment inside the
-        # same payout) — the very second solution this gate exists to find — and
-        # without the return the same subset is re-reported at every node down the
-        # all-skip path, letting duplicates consume the two-solution cutoff and
-        # mark a uniquely resolvable line ambiguous.
-        chosen.append(pool[i])
-        rest = remaining - pool[i].net
-        if rest == 0:                            # chosen is non-empty by construction (8.3)
-            candidate = tuple(t.entity_id for t in chosen)
-            if keep is None or keep(candidate):
-                solutions.append(candidate)
-        if len(solutions) < max_solutions:
-            dfs(i + 1, rest, chosen)
-        chosen.pop()
-        dfs(i + 1, remaining, chosen)
-
-    dfs(0, target_paise, [])
-    return solutions
 
 
 def _shape(txns: dict[str, GatewayTxn], composition: tuple[str, ...]) -> list[tuple]:

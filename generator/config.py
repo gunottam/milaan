@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import date
 
+from core.subsetsum import C2_MAX_POOL      # noqa: F401 — re-exported; see below
+
 SETTLEMENT_WINDOW_DAYS = 2
 
 # The oracle's budget is not the matcher's. Offline generation has no wall clock
@@ -18,10 +20,10 @@ SETTLEMENT_WINDOW_DAYS = 2
 UNIQUENESS_NODE_BUDGET_OFFLINE = 40_000_000
 UNIQUENESS_NODE_BUDGET_LIVE = 20_000
 
-C2_MAX_POOL = 35   # Above this, unanchored subset-sum cannot establish uniqueness:
-                   # 2**len(pool) exceeds the target range, so by pigeonhole every
-                   # target has many representations. Not a budget problem — an
-                   # information-theoretic one. C2 must refuse rather than search.
+# `C2_MAX_POOL` is imported above, not declared here. Generation sizes its payouts
+# so a window pool stays under it; C2 refuses above it rather than searching. Two
+# copies of that number would let the dataset and the matcher disagree about where
+# the pigeonhole bound is, and the disagreement would look like a recall result.
 DEFAULT_PAYOUTS = 120
 DEFAULT_RECORDS = 3_000
 

@@ -157,7 +157,7 @@ and a deliberately ambiguous line refuses instead of matching.
 
 ---
 
-## [ ] Stage 9 — orchestration
+## [x] Stage 9 — orchestration
 
 > Read `@docs/spec.md` sections 9.8, 9.10, 15. Build `matcher/run.py`: tier-major ordering,
 > sort by ascending pool size then `bank_line_id`, two propagation passes, run-level deadline

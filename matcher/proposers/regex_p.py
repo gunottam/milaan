@@ -24,10 +24,9 @@ Settlement membership is read out of the gateway export — `settlement_id` and
 from __future__ import annotations
 
 import re
-from collections import defaultdict
 from collections.abc import Iterable
 
-from core.models import BankLine, GatewayTxn
+from core.models import BankLine, GatewayTxn, settlement_members
 from matcher.proposers.base import Claim, Pool
 
 # `N` + bank code + yymmdd + sequence, and the same thing with the leading N gone,
@@ -45,15 +44,10 @@ class RegexProposer:
 
     def __init__(self, tier: str, txns: Iterable[GatewayTxn]) -> None:
         self.name = tier
-        members: dict[str, list[str]] = defaultdict(list)
-        self._utr: dict[str, str] = {}
-        for txn in txns:
-            if txn.settlement_id is None:
-                continue
-            members[txn.settlement_id].append(txn.entity_id)
-            if txn.settlement_utr:
-                self._utr[txn.settlement_id] = txn.settlement_utr
-        self._members = {sid: tuple(sorted(ids)) for sid, ids in members.items()}
+        txns = list(txns)
+        self.members = settlement_members(txns)
+        self._utr = {t.settlement_id: t.settlement_utr for t in txns
+                     if t.settlement_id is not None and t.settlement_utr}
 
     def propose(self, line: BankLine, pool: Pool) -> list[Claim]:
         """`pool` is unused: once an identifier is recovered, membership is a fact
@@ -70,7 +64,7 @@ class RegexProposer:
     def _by_token(self, line: BankLine) -> set[str]:
         """A2. A settlement id written into the narration outright."""
         return {token.lower() for token in SETL_RX.findall(line.narration)
-                if token.lower() in self._members}
+                if token.lower() in self.members}
 
     def _by_utr(self, line: BankLine) -> set[str]:
         """A1 exact, or A3 by prefix. A1's hits are excluded from A3 — the tier
@@ -112,5 +106,5 @@ class RegexProposer:
     def _claim(self, line: BankLine, settlement_id: str) -> Claim:
         # `window_days=0`: every cited entity belongs to the anchor settlement, and
         # G1 exempts those from the window test, so no window is being asserted.
-        return Claim(line.bank_line_id, self._members[settlement_id],
+        return Claim(line.bank_line_id, self.members[settlement_id],
                      anchor_settlement_id=settlement_id, window_days=0)

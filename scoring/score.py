@@ -27,7 +27,7 @@ from pathlib import Path
 from core.models import BankLine, GatewayTxn, Order, read_csv
 from core.money import fmt_inr
 from generator.config import UNIQUENESS_NODE_BUDGET_OFFLINE
-from matcher.run import run_ladder
+from matcher.run import MATCH_DEADLINE_MS, Run, run_ladder
 
 # Bucket -> what sits in it, and why it is not in the headline.
 BUCKETS = {
@@ -221,22 +221,81 @@ def budget_banner(truth: Mapping) -> list[str]:
             "offline run."]
 
 
-def render(report: Report, truth: Mapping, matched: Mapping, trace: Sequence[Mapping],
+def search_summary(trace: Sequence[Mapping]) -> list[str]:
+    """What Phase C did, not just what it closed.
+
+    A search tier has three outcomes and only one of them is a match. `refused` is
+    G5 withdrawing approval from a tie; `declined` is the tier not searching at all
+    — a pool past `C2_MAX_POOL`, where uniqueness is not establishable at any node
+    budget, or an exhausted node budget (§10.1). Collapsing those into "did not
+    close" would hide the difference between a rule doing its job and a limit being
+    hit, which is the distinction §9.3 spends a paragraph on.
+
+    **`proposed on`, not `attempted`.** The trace holds a line only when a tier
+    produced a candidate or declined; a tier that searched a line exhaustively and
+    found nothing coherent leaves no entry, so the tiers see more lines than this
+    counts. Labelling it `attempted` would be a number that reads larger than the
+    fact behind it.
+    """
+    out = []
+    for tier in ("C1", "C2"):
+        # One entry per line, not one per encounter: the second propagation pass
+        # (§9.8) re-offers every open line to every tier, so the raw trace counts
+        # the same line twice and a summary built on it reads double. The last
+        # entry is that line's final state, which is what the board reports.
+        steps = list({s["line"]: s for s in trace if s["tier"] == tier}.values())
+        if not steps:
+            continue
+        declined = sum(1 for s in steps if s.get("unproven"))
+        closed = sum(1 for s in steps if s["won"])
+        out.append(f"  {tier} proposed on {len(steps) - declined:>3}   "
+                   f"closed {closed:>3}   "
+                   f"G5 refused {len(steps) - closed - declined:>3}   "
+                   f"declined to search {declined:>3}")
+    return out
+
+
+def _pass_two(trace: Sequence[Mapping]) -> str:
+    """What the second propagation pass closed that the first did not (§9.8).
+
+    Resolving one line shrinks every other pool, which can turn an ambiguous line
+    into a determined one — that is the claim the second pass rests on, and it is
+    an empirical one. Printed every run rather than assumed, because a loop that
+    closes nothing is a loop to delete, not a loop to keep on faith.
+    """
+    closed = [s["line"] for s in trace if s["won"] and s.get("pass") == 2]
+    return f"{len(closed)} lines" + (f" — {', '.join(sorted(closed))}" if closed
+                                     else " (nothing pass 1 had not already)")
+
+
+def render(report: Report, truth: Mapping, ladder: Run,
            anchors: Mapping, at_risk: Mapping[str, int], run: Path) -> str:
-    """The scoreboard. Headline first, then everything held out of it by name."""
+    """The scoreboard. Headline first, then everything held out of it by name.
+
+    Nothing machine-dependent is printed here. §11: a wall clock makes the result a
+    property of the box it ran on, so the elapsed time is printed beside the board
+    and never inside it — two runs at the same seed and node budget render the same
+    bytes. `ladder.banner()` is the exception, and it is the honest one: it says the
+    clock cut the run short, which is a fact about the answer rather than about the
+    speed.
+    """
     cfg = truth["config"]
+    matched, trace = ladder.matched, ladder.trace
     tiers = Counter(step["tier"] for step in trace if step["won"])
     out = [f"MILAAN — scoreboard    {run}    seed {truth['seed']}  noise {cfg['noise']}",
            _rule("═"),
            f"  {cfg['bank_lines']} bank lines · {cfg['records']} transactions · "
            f"{len(matched)} closed · {cfg['bank_lines'] - len(matched)} open",
            "  by tier   " + "  ".join(f"{t} {tiers.get(t, 0)}"
-                                      for t in ("A1", "A2", "A3", "B1", "B2")),
+                                      for t in ("A1", "A2", "A3", "B1", "B2",
+                                                "C1", "C2")),
+           *search_summary(trace),
            f"  anchors recovered {anchors['recovered']} "
            f"(true anchor present {anchors['true_anchor_present']}, "
            f"wrong {anchors['wrong']}, no true anchor {anchors['no_true_anchor']}) "
            f"· lines closed {len(matched)}",
-           *budget_banner(truth), ""]
+           f"  propagation pass 2 closed {_pass_two(trace)}",
+           *budget_banner(truth), *ladder.banner(), ""]
 
     head = report.counts("headline")
     out += [f"HEADLINE — {BUCKETS['headline']}", _rule(),
@@ -299,14 +358,20 @@ def main(argv: list[str] | None = None) -> int:
                     help="a directory holding the three CSVs and truth.json")
     ap.add_argument("--json", type=Path, default=None,
                     help="also write the scored report here")
+    ap.add_argument("--deadline-ms", type=int, default=MATCH_DEADLINE_MS,
+                    help="run-level deadline (§9.10). 0 disables it, which is "
+                         "§11's reproducible node-budget-only mode")
     args = ap.parse_args(argv)
+    args.deadline_ms = args.deadline_ms or None
 
     truth = json.loads((args.run / "truth.json").read_text(encoding="utf-8"))
     txns = read_csv(args.run / "gateway_txns.csv", GatewayTxn)
     bank_lines = read_csv(args.run / "bank_statement.csv", BankLine)
     read_csv(args.run / "orders.csv", Order)      # §3.3 tie-out is stage 10
 
-    matched, trace = run_ladder(txns, bank_lines, truth["config"]["window_days"])
+    ladder = run_ladder(txns, bank_lines, truth["config"]["window_days"],
+                        deadline_ms=args.deadline_ms)
+    matched, trace = ladder.matched, ladder.trace
     compositions = {bid: claim.composition for bid, (_, claim, _) in matched.items()}
     report = score(truth, compositions)
     anchors = anchors_recovered(
@@ -314,7 +379,12 @@ def main(argv: list[str] | None = None) -> int:
     at_risk = {line.bank_line_id: abs(line.credit_paise - line.debit_paise)
                for line in bank_lines}
 
-    print(render(report, truth, matched, trace, anchors, at_risk, args.run))
+    print(render(report, truth, ladder, anchors, at_risk, args.run))
+    # Outside the board on purpose (§11): the wall clock is the one number here
+    # that belongs to the machine rather than to the method.
+    print(f"\n  wall clock {ladder.elapsed_ms / 1000:.1f}s  "
+          f"(deadline {'off' if ladder.deadline_ms is None else f'{ladder.deadline_ms:,} ms'}"
+          f", §15 allocates 22 s to Phase C)")
     if args.json:
         args.json.write_text(json.dumps({
             "run": str(args.run), "seed": truth["seed"],
@@ -323,6 +393,10 @@ def main(argv: list[str] | None = None) -> int:
             "uniqueness_node_budget":
                 truth["config"].get("uniqueness_node_budget"),
             "closed": len(matched), "bank_lines": len(bank_lines),
+            # §9.10. Named, not counted: "12 unattempted" and "12 with no answer"
+            # score identically and are not the same fact.
+            "exceeded_search_budget": list(ladder.exceeded),
+            "passes_run": ladder.passes_run,
             "outcomes": report.outcomes, "buckets": report.buckets,
             "break_manifest": report.break_manifest,
             "emergent_breaks": report.emergent_breaks,

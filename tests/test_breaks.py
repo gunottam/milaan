@@ -15,14 +15,12 @@ import pytest
 
 from core.models import net_contribution, target
 from generator.breaks import BREAK_COUNTS
-from generator.generate import generate
 
-STAMP = "2026-08-24T15:30:00+05:30"
 
 
 @pytest.fixture(scope="module")
-def run():
-    data, truth = generate(42, 120, 3000, "high", 2, STAMP, 2_000_000)
+def run(seed42):
+    data, truth = seed42
     return data, truth
 
 

@@ -8,6 +8,7 @@ stored as text so a CSV round-trip is lossless.
 from __future__ import annotations
 
 import csv
+from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -111,6 +112,17 @@ def net_contribution(t: GatewayTxn) -> Paise:
 def target(line: BankLine) -> Paise:
     """Signed target (finding 8.1) — negative for debit lines."""
     return line.credit_paise - line.debit_paise
+
+
+def settlement_members(txns: Iterable[GatewayTxn]) -> dict[str, tuple[str, ...]]:
+    """`settlement_id -> its entity ids`, sorted. Membership is read straight out
+    of the gateway export, so every tier that needs a whole group — A1-A3, B1, C1 —
+    reads it the same way rather than keeping its own copy."""
+    members: dict[str, list[str]] = defaultdict(list)
+    for txn in txns:
+        if txn.settlement_id is not None:
+            members[txn.settlement_id].append(txn.entity_id)
+    return {sid: tuple(sorted(ids)) for sid, ids in members.items()}
 
 
 def window_pool(line: BankLine, txns: Iterable[GatewayTxn], window_days: int,

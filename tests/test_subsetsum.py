@@ -14,7 +14,8 @@ import random
 import pytest
 
 from core.models import GatewayTxn
-from generator.uniqueness import SearchBudgetExceeded, solve_exact
+from core.subsetsum import (SearchBudgetExceeded, solve_exact,
+                            solve_tolerance)
 
 BIG = 10_000_000        # effectively unlimited node budget
 ALL = 10_000            # effectively unlimited solution cap
@@ -120,3 +121,94 @@ def test_solutions_are_deterministic_across_runs():
     first = solve_exact(pool_of(nets), 21, budget=BIG, max_solutions=ALL)
     second = solve_exact(list(reversed(pool_of(nets))), 21, budget=BIG, max_solutions=ALL)
     assert first == second        # sorted by (-abs(net), entity_id), tie-break 8.6
+
+
+# --- the tolerance pass, §9.3 -------------------------------------------------
+
+
+def brute_tolerance(pool: list[GatewayTxn], target: int, tol: int,
+                    base_size: int = 0) -> tuple[set[frozenset[str]], int]:
+    """Every non-empty subset inside §8.2's double cap, reduced to those at the
+    minimum |delta|. Trivially correct at ≤18 items, which is the whole point."""
+    best: set[frozenset[str]] = set()
+    best_abs = tol + 1
+    for r in range(1, len(pool) + 1):
+        for combo in itertools.combinations(pool, r):
+            delta = sum(t.net for t in combo) - target
+            if abs(delta) > min(tol, base_size + r):
+                continue
+            if abs(delta) < best_abs:
+                best, best_abs = {frozenset(t.entity_id for t in combo)}, abs(delta)
+            elif abs(delta) == best_abs:
+                best.add(frozenset(t.entity_id for t in combo))
+    return best, best_abs
+
+
+@pytest.mark.parametrize("max_size,iterations,seed", [(12, 120, 3), (16, 8, 4)])
+def test_the_tolerance_pass_finds_the_same_minimum_brute_force_does(
+        max_size, iterations, seed):
+    """The pass exists to take the **minimum** |delta| across the whole tree, not
+    the first node inside the band. Only brute force can check that it did."""
+    rng = random.Random(seed)
+    for _ in range(iterations):
+        n = rng.randint(1, max_size)
+        nets = [rng.choice([1, -1]) * rng.randint(1, 40) for _ in range(n)]
+        pool = pool_of(nets)
+        target = rng.randint(-60, 60)
+        tol, base = rng.choice([(3, 0), (8, 0), (8, 4), (100, 0)])
+
+        expected, best_abs = brute_tolerance(pool, target, tol, base)
+        found = solve_tolerance(pool, target, BIG, tol, base)
+
+        assert len(found) == min(2, len(expected)), (nets, target, tol, base)
+        assert as_sets([c for c, _ in found]) <= expected
+        for candidate, delta in found:
+            assert abs(delta) == best_abs
+            # The delta reported is G2's residual, `Σ net − target`, so a caller
+            # can compare it with the gate that will judge the claim.
+            assert delta == sum(pool_of(nets)[int(e[1:])].net for e in candidate) - target
+
+
+def test_the_minimum_is_taken_not_the_first_node_inside_the_band():
+    # Sorted by (-abs(net), entity_id), so {50} is reached long before {30, 19}.
+    # Returning the first qualifying node gives delta 2; the minimum is 1.
+    pool = pool_of([50, 30, 19])
+    found = solve_tolerance(pool, 48, BIG, tol=5)
+    assert len(found) == 1
+    assert as_sets([c for c, _ in found]) == {frozenset({"e01", "e02"})}
+    assert found[0][1] == 1
+
+
+def test_two_sets_at_the_same_minimum_are_both_returned():
+    # A tie inside the band is a G5 refusal, so both have to come back — returning
+    # one would be an answer to a question with two.
+    found = solve_tolerance(pool_of([11, 9, 4]), 10, BIG, tol=5)
+    assert as_sets([c for c, _ in found]) == {frozenset({"e00"}), frozenset({"e01"})}
+    assert {d for _, d in found} == {1, -1}
+
+
+def test_base_size_widens_the_per_transaction_cap_to_the_full_composition():
+    """§8.2's second cap counts the whole composition. C1 searches only the
+    residual, so without `base_size` the solver would be stricter than the G4 that
+    judges the claim and would discard candidates the gate admits."""
+    pool = pool_of([100])
+    # One residual item, delta 3: `min(tol, len(chosen))` is 1, so it is outside.
+    assert solve_tolerance(pool, 97, BIG, tol=100) == []
+    # The same claim with a 20-member anchor group seeded: the cap is 21, inside.
+    assert solve_tolerance(pool, 97, BIG, tol=100, base_size=20) == [(("e00",), 3)]
+
+
+def test_the_tolerance_pass_refuses_on_budget_rather_than_guessing():
+    # The minimum is not known until the tree is exhausted, so a partial tree says
+    # nothing about which candidate was best (§10.1).
+    pool = pool_of([2 * i for i in range(1, 25)])
+    with pytest.raises(SearchBudgetExceeded):
+        solve_tolerance(pool, 101, budget=50, tol=100)
+
+
+def test_a_wider_band_only_ever_admits_more():
+    # Monotone in `tol`, which is what makes G4 the sole non-monotonic gate (§8.1):
+    # widening cannot lose a candidate, only admit one strict arithmetic rejected.
+    pool = pool_of([40, 25, 11, -7])
+    assert solve_tolerance(pool, 39, BIG, tol=0) == []
+    assert solve_tolerance(pool, 39, BIG, tol=1) == [(("e00",), 1)]

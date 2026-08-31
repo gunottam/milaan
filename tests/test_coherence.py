@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from core.coherence import is_plausible_payout
 from core.models import BankLine, GatewayTxn
-from generator.uniqueness import classify, solve_exact
+from core.subsetsum import solve_exact
+from generator.uniqueness import classify
 
 BIG = 10_000_000
 

@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable
 
-from core.models import BankLine, GatewayTxn, target
+from core.models import BankLine, GatewayTxn, settlement_members, target
 from core.money import Paise
 from matcher.proposers.base import Claim, Pool
 
@@ -34,19 +34,15 @@ class LookupProposer:
                  window_days: int = SETTLEMENT_WINDOW_DAYS) -> None:
         self.name = tier
         self.window_days = window_days
-        members: dict[str, list[GatewayTxn]] = defaultdict(list)
-        for txn in txns:
-            if txn.settlement_id is not None:
-                members[txn.settlement_id].append(txn)
-
-        self._members = {sid: tuple(sorted(t.entity_id for t in group))
-                         for sid, group in members.items()}
+        txns = list(txns)
+        self._members = settlement_members(txns)
+        by_id = {t.entity_id: t for t in txns}
         # total_paise -> {settlement_id}. Built once (§9.2); `release` removes on
         # claim in O(1) and nothing rebuilds it per pass.
         self._index: dict[Paise, set[str]] = defaultdict(set)
         self._total: dict[str, Paise] = {}
-        for sid, group in members.items():
-            total = sum(t.net for t in group)
+        for sid, group in self._members.items():
+            total = sum(by_id[e].net for e in group)
             # §5.1: a settlement netting to zero produces no payout and therefore no
             # bank line, ever. It is not a candidate for anything.
             if total:

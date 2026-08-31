@@ -12,25 +12,27 @@ from collections import Counter
 import pytest
 
 from core.models import BankLine, GatewayTxn, target
-from generator.generate import generate
 from matcher.proposers.lookup_p import LookupProposer
 from matcher.proposers.regex_p import RegexProposer
-from matcher.run import run_ladder
+from matcher.run import build_tiers, run_ladder
 from matcher.uniqueness import resolve
 from matcher.verify import check
 from tests.test_invariants import grep
 
-STAMP = "2026-08-24T15:30:00+05:30"
 DAY = "2026-01-05"
 
 
 @pytest.fixture(scope="module")
-def run():
+def run(seed42):
     # The 2M budget only changes how many truth records read "unproven"; the CSVs
     # it describes are the same bytes the 40M offline run emits.
-    data, truth = generate(42, 120, 3000, "high", 2, STAMP, 2_000_000)
-    matched, trace = run_ladder(data.txns, data.bank_lines)
-    return data, truth, matched, trace
+    data, truth = seed42
+    # A1..B2. Phase C runs in `test_phase_c.py`; this file measures Phase A and B.
+    # `deadline_ms=None` is node budget only — §11's reproducible mode. A wall
+    # clock would make every count in this file a property of the machine.
+    r = run_ladder(data.txns, data.bank_lines,
+                   tiers=build_tiers(data.txns)[:5], deadline_ms=None)
+    return data, truth, r.matched, r.trace
 
 
 # --- what the two phases actually close --------------------------------------
@@ -74,7 +76,10 @@ def test_a_recovered_identifier_is_not_a_match(run):
     cited a real settlement whose total is not the payout total. Those fall to C1's
     anchored residual search in stage 8, not to a weaker identifier test."""
     _, _, matched, trace = run
-    a1 = [t for t in trace if t["tier"] == "A1"]
+    # Pass 1 only: this is what A1 does on a fresh board. The second propagation
+    # pass re-offers every open line to every tier (§9.8), so the unfiltered trace
+    # counts the same encounter twice.
+    a1 = [t for t in trace if t["tier"] == "A1" and t["pass"] == 1]
     assert len(a1) == 81
     assert sum(t["won"] for t in a1) == 40
 
@@ -84,7 +89,7 @@ def test_the_prefix_cascade_is_mostly_thrown_away(run):
     truncated fragment matches almost the whole book — 123 candidates at the median
     here. G1 drops the claimed ones in bulk."""
     _, _, _, trace = run
-    a3 = [t for t in trace if t["tier"] == "A3"]
+    a3 = [t for t in trace if t["tier"] == "A3" and t["pass"] == 1]
     assert len(a3) == 12
     assert all(t["candidates"] > 1 for t in a3)
     assert sum(t["stale"] for t in a3) > 400

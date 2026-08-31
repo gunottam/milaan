@@ -13,12 +13,11 @@ import pytest
 
 from core.models import BANK_COLUMNS, BankLine, GatewayTxn, read_csv
 from generator.config import UNIQUENESS_NODE_BUDGET_OFFLINE
-from generator.generate import emit, generate
-from matcher.run import run_ladder
+from generator.generate import emit
+from matcher.run import Run, build_tiers, run_ladder
 from scoring.score import (BUCKETS, anchors_recovered, bucket, budget_banner,
                            outcome, precision, recall, render, score)
 
-STAMP = "2026-08-24T15:30:00+05:30"
 
 RESOLVABLE = {"resolvable": True, "uniqueness": "verified", "injected_breaks": [],
               "composition": ["pay_1", "pay_2"], "expected_delta_paise": 0}
@@ -241,19 +240,22 @@ def test_a_truth_file_with_no_budget_recorded_is_comparable_with_nothing():
 
 
 @pytest.fixture(scope="module")
-def baseline():
+def baseline(seed42):
     # 2M, not the 40M offline budget: at 2M more lines read `unproven` and fewer
     # read `AMBIGUOUS_SUBSET`, so the bucket sizes here are smaller than the
     # committed run's. The CSVs are the same bytes and the matcher sees no
     # difference — only truth's confidence about them changes.
-    data, truth = generate(42, 120, 3000, "high", 2, STAMP, 2_000_000)
+    data, truth = seed42
     # Pinned, not incidental: every bucket size below is a function of it, and the
     # scoreboard's committed run uses the 40M offline budget. `budget_banner` is
     # what says so at the top of the board.
     assert truth["config"]["uniqueness_node_budget"] == 2_000_000
-    matched, trace = run_ladder(data.txns, data.bank_lines)
-    compositions = {bid: claim.composition for bid, (_, claim, _) in matched.items()}
-    return data, truth, matched, trace, score(truth, compositions)
+    # A1..B2 only. Phase C is stage 8's; this fixture is stage 7's measurement and
+    # stays that way, so a change to C moves `test_phase_c.py` and not this file.
+    r = run_ladder(data.txns, data.bank_lines,
+                   tiers=build_tiers(data.txns)[:5], deadline_ms=None)
+    compositions = {b: c.composition for b, (_, c, _) in r.matched.items()}
+    return data, truth, r.matched, r.trace, score(truth, compositions)
 
 
 def test_the_buckets_partition_every_bank_line(baseline):
@@ -274,9 +276,9 @@ def test_phase_a_and_b_fabricate_nothing(baseline):
 
 
 def test_the_baseline_recall(baseline):
-    """The stage-7 number, before Phase C exists. 42 of the open lines have a
+    """The stage-7 number, Phase A and B only. 42 of the open lines have a
     recovered anchor and a composition that nets one or two cross-cycle strays —
-    C1's, in stage 8."""
+    C1's, and `test_phase_c.py` is where that is scored."""
     _, _, _, _, report = baseline
     head = report.counts("headline")
     assert head == Counter({"TP": 54, "FN": 34, "TN": 13})
@@ -311,7 +313,8 @@ def test_the_scoreboard_renders(baseline):
                                 {t.entity_id: t.settlement_id for t in data.txns})
     at_risk = {l.bank_line_id: abs(l.credit_paise - l.debit_paise)
                for l in data.bank_lines}
-    text = render(report, truth, matched, trace, anchors, at_risk, "data/runs/seed42")
+    text = render(report, truth, Run(matched, list(trace), passes_run=2),
+                  anchors, at_risk, "data/runs/seed42")
     assert "precision" in text and "AMBIGUOUS_SUBSET" in text
     assert "anchors recovered 93" in text
 
