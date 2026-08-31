@@ -9,12 +9,12 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
-from core.models import BANK_COLUMNS, GATEWAY_COLUMNS, ORDER_COLUMNS
+from core.models import (BANK_COLUMNS, GATEWAY_COLUMNS, ORDER_COLUMNS, window_pool)
 from core.money import IST
 from generator import config as cfg
 from generator.breaks import BREAK_COUNTS, inject
 from generator.entities import Dataset, build
-from generator.uniqueness import classify, mark_duplicate_targets, window_pool
+from generator.uniqueness import classify, mark_duplicate_targets
 
 
 def _cell(value: object) -> str:

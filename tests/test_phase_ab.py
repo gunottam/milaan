@@ -1,9 +1,8 @@
 """Phase A and Phase B against seed 42, plus the two cases the seed never fires.
 
-§9.1, §9.2, §9.5. The ladder below is not `matcher/run.py` — tier-major ordering,
-propagation and deadlines are stage 9. It is the smallest driver that can measure a
-tier: run every line through one proposer before moving to the next, apply G5 to
-what passes, commit, repeat.
+§9.1, §9.2, §9.5. The ladder these numbers come from is `matcher.run.run_ladder` —
+single pass, no propagation, no deadline. Stage 9 owns the real ordering, and any
+number here can move when it lands.
 """
 
 from __future__ import annotations
@@ -14,9 +13,9 @@ import pytest
 
 from core.models import BankLine, GatewayTxn, target
 from generator.generate import generate
-from generator.uniqueness import window_pool
 from matcher.proposers.lookup_p import LookupProposer
 from matcher.proposers.regex_p import RegexProposer
+from matcher.run import run_ladder
 from matcher.uniqueness import resolve
 from matcher.verify import check
 from tests.test_invariants import grep
@@ -25,49 +24,12 @@ STAMP = "2026-08-24T15:30:00+05:30"
 DAY = "2026-01-05"
 
 
-def run_ladder(data, window_days: int = 2):
-    """A1 → A2 → A3 → B1 → B2, tier-major. Returns (matched, trace)."""
-    by_id = {t.entity_id: t for t in data.txns}
-    b1 = LookupProposer("B1", data.txns, window_days)
-    tiers = [RegexProposer("A1", data.txns), RegexProposer("A2", data.txns),
-             RegexProposer("A3", data.txns), b1,
-             LookupProposer("B2", data.txns, window_days)]
-    claimed: set[str] = set()
-    matched: dict[str, tuple] = {}
-    trace: list[dict] = []
-
-    for tier in tiers:
-        for line in sorted(data.bank_lines, key=lambda l: l.bank_line_id):
-            if line.bank_line_id in matched:
-                continue
-            pool = window_pool(line, data.txns, window_days, frozenset(claimed))
-            claims = tier.propose(line, pool)
-            if not claims:
-                continue
-            verdicts = [(claim, check(claim, line, by_id, claimed)) for claim in claims]
-            won, verdict = resolve(verdicts)
-            trace.append({
-                "line": line.bank_line_id, "tier": tier.name,
-                "candidates": len(claims), "won": won is not None,
-                "stale": sum(1 for _, v in verdicts if v.gate == "G1"
-                             and "already claimed" in (v.reason or "")),
-                "refused": won is None and verdict is not None,
-            })
-            if won is None:
-                continue
-            matched[line.bank_line_id] = (tier.name, won, verdict)
-            claimed |= set(won.composition)
-            if won.anchor_settlement_id:
-                b1.release(won.anchor_settlement_id)
-    return matched, trace
-
-
 @pytest.fixture(scope="module")
 def run():
     # The 2M budget only changes how many truth records read "unproven"; the CSVs
     # it describes are the same bytes the 40M offline run emits.
     data, truth = generate(42, 120, 3000, "high", 2, STAMP, 2_000_000)
-    matched, trace = run_ladder(data)
+    matched, trace = run_ladder(data.txns, data.bank_lines)
     return data, truth, matched, trace
 
 

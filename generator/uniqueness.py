@@ -14,8 +14,8 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 
 from core.coherence import is_plausible_payout
-from core.models import BankLine, GatewayTxn, target
-from core.money import Paise, ist_date, in_window, window_key
+from core.models import BankLine, GatewayTxn, target, window_pool
+from core.money import Paise, ist_date, window_key
 from generator.config import UNIQUENESS_NODE_BUDGET_OFFLINE
 
 
@@ -89,16 +89,6 @@ def solve_exact(pool: list[GatewayTxn], target_paise: Paise, budget: int,
 
     dfs(0, target_paise, [])
     return solutions
-
-
-def window_pool(line: BankLine, txns: Iterable[GatewayTxn], window_days: int,
-                claimed: frozenset[str] = frozenset()) -> list[GatewayTxn]:
-    """Transactions whose `settled_at` IST date lies in
-    `[value_date − window_days, value_date]`. Never reads `on_hold` (§9.3)."""
-    anchor = window_key(line.value_date, line.txn_date)
-    return [t for t in txns
-            if t.settled_at and t.entity_id not in claimed
-            and in_window(ist_date(t.settled_at), anchor, window_days)]
 
 
 def _shape(txns: dict[str, GatewayTxn], composition: tuple[str, ...]) -> list[tuple]:

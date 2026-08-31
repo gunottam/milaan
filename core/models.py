@@ -7,9 +7,15 @@ stored as text so a CSV round-trip is lossless.
 
 from __future__ import annotations
 
+import csv
+from collections.abc import Iterable
 from dataclasses import dataclass
+from pathlib import Path
+from typing import TypeVar
 
-from core.money import Paise
+from core.money import Paise, in_window, ist_date, window_key
+
+T = TypeVar("T")
 
 GATEWAY_COLUMNS = (
     "entity_id", "type", "created_at", "settled_at", "settlement_id",
@@ -105,3 +111,37 @@ def net_contribution(t: GatewayTxn) -> Paise:
 def target(line: BankLine) -> Paise:
     """Signed target (finding 8.1) — negative for debit lines."""
     return line.credit_paise - line.debit_paise
+
+
+def window_pool(line: BankLine, txns: Iterable[GatewayTxn], window_days: int,
+                claimed: frozenset[str] = frozenset()) -> list[GatewayTxn]:
+    """Transactions whose `settled_at` IST date lies in
+    `[value_date − window_days, value_date]`. Never reads `on_hold` (§9.3)."""
+    anchor = window_key(line.value_date, line.txn_date)
+    return [t for t in txns
+            if t.settled_at and t.entity_id not in claimed
+            and in_window(ist_date(t.settled_at), anchor, window_days)]
+
+
+_BOOL_COLUMNS = frozenset({"international", "on_hold", "settled"})
+_INT_COLUMNS = frozenset({"amount_paise", "fee_paise", "tax_paise", "tds_paise",
+                          "debit_paise", "credit_paise", "balance_paise",
+                          "gross_paise", "source_amount_minor", "fx_rate_micros"})
+_TEXT_COLUMNS = frozenset({"description", "notes", "narration"})
+
+
+def _parse(column: str, raw: str) -> object:
+    """Invert `generator.generate._cell`. Empty means null, except where the
+    column is free text and empty means empty."""
+    if column in _BOOL_COLUMNS:
+        return raw == "true"
+    if column in _INT_COLUMNS:
+        return int(raw) if raw else None
+    return raw if raw or column in _TEXT_COLUMNS else None
+
+
+def read_csv(path: Path, cls: type[T]) -> list[T]:
+    """Read one of the three emitted CSVs back into its frozen value type."""
+    with path.open(newline="", encoding="utf-8") as fh:
+        return [cls(**{k: _parse(k, v) for k, v in row.items()})
+                for row in csv.DictReader(fh)]
