@@ -319,15 +319,23 @@ is a real profile and is §6.2's own example, but it is a modelling choice that 
 be told about rather than left to discover — so it is stated in the finding above rather than
 buried in config.
 
-**Scoring must disclose the unproven bucket.** Nothing is excluded from scoring any more —
+**Scoring owes three disclosed buckets alongside the headline.** Headline precision and
+recall are measured over `uniqueness: "verified"` lines. Three sets sit outside that and each
+has to be reported by name rather than folded in or dropped — counts are seed 42:
+
+| bucket | seed 42 | what stage 7 must print |
+|---|---|---|
+| `uniqueness: "unproven"` | 3 lines, all `INSTANT_SETTLEMENT` | matched / refused / wrong. The composition is known, only its uniqueness is not |
+| `uniqueness: "by_construction"` | 10 lines — **6** `SPLIT_PAYOUT` halves (`requires_tier: "C3"`) and 4 `DISPUTE_DEBIT` singles | the 6 halves score **FN until C3 lands in stage 13**, and the truth file does not change when it does; the 4 singles are B2's from stage 6 |
+| `emergent_breaks.AMBIGUOUS_SUBSET` | 16 lines, `refused` / `matched` both `null` | refused vs matched. This is the true-negative class — a refusal here is the only evidence G5 works, and a match here is a fabricated one |
+
+Nothing is excluded from scoring any more —
 `excluded_from_scoring` is gone from the generator entirely. A line whose uniqueness the solver
 could not settle is recorded `resolvable: true, uniqueness: "unproven"` with its real
 composition, because the composition is known by construction and only its *uniqueness* is
 unknown; those are different facts and collapsing them drops the line from every denominator.
 Since search cost tracks negative-net items, the dropped set is exactly the hardest lines, so
-excluding it inflates recall. Stage 7 owes a separate named bucket: headline precision and
-recall over verified-unique lines, plus a disclosed line for the unproven set showing
-matched / refused / wrong.
+excluding it inflates recall.
 
 At the raised budget only **3 of 134 lines** are unproven on seed 42 (0–3 across five seeds),
 down from 13, so the disclosed bucket is now small enough to read at a glance.
