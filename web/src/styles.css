@@ -1,0 +1,287 @@
+/* §13. A ledger, not a dashboard.
+ *
+ * Reference: a bank reconciliation statement on greenbar continuous-feed paper.
+ * Ruled rows, tabular figures on the decimal, a double rule under a final sum. The
+ * job is to make numbers look checkable.
+ *
+ * Deliberately absent: drop-shadowed cards, gradient hero stats, rounded SaaS
+ * chrome, donut charts. There is no `box-shadow` in this file at all, and the only
+ * `border-radius` declarations are the two zeroes that undo the browser's default
+ * on a form control. That is the design, not an oversight. Light only — projector
+ * legibility, and a ledger is paper.
+ */
+
+:root {
+  --paper: #FBFBF8;
+  --bar:   #EBF0E9;
+  --rule:  #D5D8D0;
+  --ink:   #1C1E1A;
+  --ink-soft: #6B6F66;
+  --tally: #1D6B4F;
+  --break: #A8452B;
+  --hypo:  #6A5BA8;
+
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --sans: 'IBM Plex Sans', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Every numeral, entity id and amount is monospace with tabular figures, so
+ * columns of money line up on the decimal without a single explicit alignment
+ * rule. This is the one typographic decision the whole screen rests on. */
+.mono, td.num, .amount, .eid {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* 11px, tracking 0.12em. §13 fixes both. */
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+.sheet { max-width: 1180px; margin: 0 auto; padding: 22px 20px 60px; }
+
+/* --- masthead ------------------------------------------------------------ */
+
+.masthead { display: flex; align-items: baseline; gap: 20px; flex-wrap: wrap; }
+
+.wordmark {
+  font-family: var(--mono);
+  font-size: 21px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+}
+
+.controls { display: flex; align-items: center; gap: 14px; margin-left: auto; }
+
+.field { display: flex; align-items: baseline; gap: 7px; }
+
+.field label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+               color: var(--ink-soft); font-weight: 500; }
+
+/* Inputs are ruled boxes, not chips. No radius, no shadow, no focus glow —
+ * a 2px underline is how paper marks the field you are writing in. */
+.field input, .field select {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  padding: 4px 7px;
+}
+.field input { width: 72px; }
+.field input:focus, .field select:focus {
+  outline: none;
+  border-color: var(--ink);
+}
+
+button.run {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  padding: 7px 20px;
+  cursor: pointer;
+}
+button.run:disabled { background: var(--ink-soft); border-color: var(--ink-soft);
+                      cursor: default; }
+
+/* The double rule under the masthead — the ═══ of the CLI board, in CSS. */
+.double-rule {
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  height: 3px;
+  margin: 12px 0 0;
+}
+
+/* --- summary ------------------------------------------------------------- */
+
+.summary { padding: 14px 0 16px; border-bottom: 1px solid var(--rule); }
+
+.summary-line { display: flex; gap: 26px; align-items: baseline; flex-wrap: wrap;
+                margin-bottom: 6px; }
+
+.summary .figure { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.summary .label  { color: var(--ink-soft); }
+
+/* The residue gap is the global honesty indicator (§13) and sits in the header.
+ * It is the only element on the page allowed to shout. */
+.gap {
+  margin-left: auto;
+  display: flex; align-items: baseline; gap: 9px;
+  padding: 4px 11px;
+  border: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.gap.reconciles { border-color: var(--tally); color: var(--tally); }
+.gap.broken     { border-color: var(--break); color: var(--break); }
+.gap.unknown    { border-color: var(--ink-soft); color: var(--ink-soft); }
+
+/* The ablation bar. A ruled track, not a progress widget. */
+.ablation { display: flex; align-items: center; gap: 11px; font-size: 12px; }
+.track { position: relative; width: 260px; height: 9px; border: 1px solid var(--rule); }
+.track .det { position: absolute; inset: 0 auto 0 0; background: var(--bar); }
+.track .agent { position: absolute; inset: 0 auto 0 0; background: var(--hypo);
+                opacity: 0.35; }
+
+.notes { margin: 8px 0 0; padding: 0; list-style: none; }
+.notes li { color: var(--break); font-size: 12px; padding: 2px 0; }
+.notes li::before { content: '!! '; font-family: var(--mono); }
+
+/* --- the two columns ----------------------------------------------------- */
+
+.columns { display: grid; grid-template-columns: 1.35fr 1fr; gap: 0; }
+.columns > section:first-child { border-right: 1px solid var(--rule); padding-right: 22px; }
+.columns > section:last-child  { padding-left: 22px; }
+
+@media (max-width: 900px) {
+  .columns { grid-template-columns: 1fr; }
+  .columns > section:first-child { border-right: none; padding-right: 0; }
+  .columns > section:last-child  { padding-left: 0; border-top: 1px solid var(--rule); }
+}
+
+.col-head { display: flex; align-items: baseline; justify-content: space-between;
+            padding: 16px 0 7px; border-bottom: 1px solid var(--ink); }
+
+/* --- ruled rows, greenbar alternating tint ------------------------------- */
+
+table.ledger { width: 100%; border-collapse: collapse; }
+
+table.ledger tbody tr.row { border-bottom: 1px solid var(--rule); cursor: pointer; }
+/* Greenbar: continuous-feed paper alternates a pale green band every other row so
+ * the eye tracks across a wide line. `--bar` is that band. */
+table.ledger tbody tr.row:nth-of-type(4n + 3) { background: var(--bar); }
+table.ledger tbody tr.row:hover { background: var(--rule); }
+
+table.ledger td { padding: 5px 8px; vertical-align: baseline; }
+table.ledger td.num { text-align: right; }
+table.ledger td.tick { width: 18px; color: var(--tally); text-align: center;
+                       font-family: var(--mono); }
+
+.eid { font-size: 13px; }
+
+.tier { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); }
+.tol  { color: var(--break); }
+.hypo { color: var(--hypo); }
+/* §13's `--hypo` marker. No hypothesis-sourced match exists until stage 12 builds
+ * the detective; the rule is here so that when one arrives its provenance is
+ * unambiguous rather than needing a stylesheet change to become visible. */
+.hypo-mark { color: var(--hypo); font-family: var(--mono); }
+
+/* --- the proof strip ----------------------------------------------------- */
+
+/* Expands in place. No modal — a modal covers the row you are checking it against,
+ * and the whole point is that the arithmetic sits under the line it explains. */
+tr.proof > td { padding: 0 8px 16px; background: var(--paper); }
+
+.strip { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 13px; }
+
+.strip .strip-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 9px 0 8px; color: var(--ink-soft);
+}
+
+.strip table { width: 100%; border-collapse: collapse; }
+.strip td { padding: 2px 0; }
+.strip td.sign  { width: 20px; }
+.strip td.count { width: 46px; text-align: right; padding-right: 10px; }
+.strip td.desc  { color: var(--ink); }
+.strip td.figure { text-align: right; width: 160px; }
+
+/* Single rule above the total, double rule below. The double rule is the
+ * bookkeeping convention for a closed sum and it is the reason the strip reads as
+ * a statement rather than a table of numbers. */
+.strip tr.total td { border-top: 1px solid var(--ink); padding-top: 4px; }
+.strip tr.total td.figure { font-weight: 500; }
+.strip .double-under {
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  height: 3px;
+  width: 160px;
+  margin-left: auto;
+}
+
+.strip .ties {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding-top: 9px; color: var(--tally);
+}
+.strip .ties.off { color: var(--break); }
+
+/* §9.4's audit flag on a closed line. Ruled off from the proof above it, in the
+ * break colour, because it is a thing to confirm and not a thing that failed. */
+.strip .flags {
+  margin: 9px 0 0; padding: 8px 0 0 16px;
+  border-top: 1px solid var(--rule);
+  list-style: none; font-size: 12px; color: var(--break);
+}
+.strip .flags li { padding: 1px 0; }
+.strip .flags li::before { content: '⚑ '; margin-left: -16px; }
+
+/* --- open items ---------------------------------------------------------- */
+
+.exc-type { font-family: var(--mono); font-size: 12px; }
+.conf { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+        color: var(--ink-soft); }
+.age  { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); }
+
+.detail { font-size: 13px; padding: 4px 0 14px; }
+.detail ul { margin: 0 0 9px; padding-left: 16px; }
+.detail li { padding: 2px 0; color: var(--ink-soft); }
+.detail .blocked { color: var(--ink); padding: 4px 0; }
+.detail .blocked b { font-weight: 500; }
+.detail .action { font-family: var(--mono); font-size: 12px; color: var(--ink-soft);
+                  padding-top: 4px; }
+.detail .diag { font-family: var(--mono); font-size: 12px; color: var(--break); }
+
+/* --- phases -------------------------------------------------------------- */
+
+.phases { display: flex; gap: 0; flex-wrap: wrap; padding: 10px 0 0; }
+.phase {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em;
+  color: var(--rule); padding: 2px 9px 2px 0;
+}
+.phase.past { color: var(--ink-soft); }
+.phase.now  { color: var(--ink); font-weight: 500; }
+.phase.skipped { color: var(--rule); text-decoration: line-through; }
+
+/* --- motion -------------------------------------------------------------- */
+
+/* Rows settle into the closed column as they resolve, ~40 ms stagger. Nothing else
+ * animates — a ledger that moves is a ledger nobody trusts. */
+@keyframes settle {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: none; }
+}
+tr.row.fresh { animation: settle 160ms ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  tr.row.fresh { animation: none; }
+}
+
+.empty { color: var(--ink-soft); padding: 18px 0; font-size: 13px; }

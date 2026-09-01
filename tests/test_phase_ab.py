@@ -39,10 +39,19 @@ def run(seed42):
 
 
 def test_phase_a_and_b_close_64_of_134_lines(run):
+    """64, and the *composition* of the 64 moved at stage 11.
+
+    A3 closes 7 where it closed 4, and B1 closes 13 where it closed 16 — the same
+    total, three lines earlier in the ladder. That is the widened `FRAGMENT_RX`
+    (stage 11) letting a 6-character truncation reach §9.5's cascade: those three
+    lines now resolve on a recovered identifier instead of on an amount collision,
+    which is strictly stronger evidence and is why tier-major ordering puts A ahead
+    of B in the first place.
+    """
     data, _, matched, _ = run
     assert len(data.bank_lines) == 134
     per_tier = Counter(tier for tier, _, _ in matched.values())
-    assert dict(per_tier) == {"A1": 40, "A3": 4, "B1": 16, "B2": 4}
+    assert dict(per_tier) == {"A1": 40, "A3": 7, "B1": 13, "B2": 4}
     assert len(matched) == 64
 
 
@@ -87,12 +96,19 @@ def test_a_recovered_identifier_is_not_a_match(run):
 def test_the_prefix_cascade_is_mostly_thrown_away(run):
     """§9.5: every settlement from one bank on one day shares a long prefix, so a
     truncated fragment matches almost the whole book — 123 candidates at the median
-    here. G1 drops the claimed ones in bulk."""
+    here. G1 drops the claimed ones in bulk.
+
+    **This is the measurement stage 11's regex widening was argued from.** A3 now
+    reaches 21 lines rather than 12, and the median is still 123 candidates with
+    zero wrong anchors: a large candidate set is what the cascade is *for*, and
+    filters 2-4 are G1 and G2, which do not care how many they were handed. The
+    cost is nodes, not correctness — see `docs/journal/stage-11.md`.
+    """
     _, _, _, trace = run
     a3 = [t for t in trace if t["tier"] == "A3" and t["pass"] == 1]
-    assert len(a3) == 12
+    assert len(a3) == 21
     assert all(t["candidates"] > 1 for t in a3)
-    assert sum(t["stale"] for t in a3) > 400
+    assert sum(t["stale"] for t in a3) > 800
 
 
 def test_a2_finds_nothing_in_this_dataset(run):

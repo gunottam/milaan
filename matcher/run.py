@@ -27,7 +27,7 @@ and Phase E surfaces the damage. It is not claimed to be optimal.
 from __future__ import annotations
 
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from core.models import BankLine, GatewayTxn, window_pool
@@ -127,7 +127,8 @@ def build_tiers(txns: Sequence[GatewayTxn], window_days: int = 2) -> list:
 def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                window_days: int = 2, tiers: Sequence | None = None, *,
                deadline_ms: int | None = MATCH_DEADLINE_MS,
-               passes: int = PROPAGATION_PASSES) -> Run:
+               passes: int = PROPAGATION_PASSES,
+               on_tier: Callable[[str, int, int], None] | None = None) -> Run:
     """A1 → A2 → A3 → B1 → B2 → C1 → C2, twice, under one clock.
 
     `deadline_ms=None` disables the clock and leaves the node budget as the only
@@ -137,6 +138,13 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
 
     Never raises. A deadline is a normal outcome, not an error, and a reconciler
     that dies on its own timeout has converted a partial answer into no answer.
+
+    `on_tier(tier_name, pass_no, closed_so_far)` fires once as each tier opens. It
+    exists so §12's `phase` and `progress` fields report what the ladder is actually
+    doing rather than a timer pretending to — the API polls at 500 ms and the run is
+    under 60 s, so a progress bar that interpolates would be visibly lying for most
+    of the run. It is a notification, never a control: nothing it returns is read,
+    and an exception from it is the caller's bug, not a reason to abandon the run.
     """
     by_id = {t.entity_id: t for t in txns}
     tiers = build_tiers(txns, window_days) if tiers is None else tiers
@@ -165,6 +173,8 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                 # this loop could overrun its own deadline.
                 stopped = True
                 break
+            if on_tier is not None:
+                on_tier(tier.name, pass_no, len(matched))
             open_lines = [b for b in bank_lines if b.bank_line_id not in matched]
             # Pools are built once per tier, for the sort, and filtered against the
             # live `claimed` set at each line. Rebuilding per line would rescan

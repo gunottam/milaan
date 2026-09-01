@@ -25,6 +25,19 @@ _KINDS = (
     ("transfer", "route transfers", -1),
     ("adjustment_debit", "adjustments debited", -1),
 )
+# Deductions are summed over **payments only**, because `net_contribution` (§3.1)
+# subtracts them for payments and for nothing else: a refund contributes exactly
+# `-amount_paise`, whatever else its row carries.
+#
+# This is not a formality. `ROUNDING_DRIFT` and `INSTANT_SETTLEMENT` allocate their
+# charge across a settlement's members (§4.3) and thirteen refunds on seed 42 come
+# out holding a non-zero `fee_paise` that the payout arithmetic never sees. Summing
+# over everything deducted that money a second time, so the strip's total missed the
+# gate's by up to ₹1.72 on any composition holding one — the proof strip is the
+# thing a human verifies, and one that does not equal the sum `check()` performed is
+# the exact failure I8 exists to prevent. Caught at stage 11 by the first assertion
+# that compared `Proof.delta_paise` with `Verdict.delta_paise`.
+_DEDUCTED_FROM = "payment"
 _DEDUCTIONS = (
     ("fee_paise", "MDR"),
     ("tax_paise", "GST @ 18% on MDR"),
@@ -45,7 +58,12 @@ class Proof:
 
 def build_proof(bank_line_id: str, composition: Iterable[str],
                 txns: Mapping[str, GatewayTxn], target_paise: Paise) -> Proof:
-    """The §13 breakdown of a composition against its bank line."""
+    """The §13 breakdown of a composition against its bank line.
+
+    `total_paise` is `Σ net_contribution(composition)` by construction, and
+    `tests/test_gates.py::test_the_proof_totals_what_the_gate_summed` pins that.
+    The strip is only worth showing if it is the same arithmetic the gate ran.
+    """
     chosen = [txns[e] for e in composition]
     rows: list[tuple[str, int, Paise]] = []
 
@@ -54,7 +72,8 @@ def build_proof(bank_line_id: str, composition: Iterable[str],
         if items:
             rows.append((label, len(items), sign * sum(t.amount_paise for t in items)))
     for field, label in _DEDUCTIONS:
-        amount = sum(getattr(t, field) for t in chosen)
+        amount = sum(getattr(t, field) for t in chosen
+                     if t.type == _DEDUCTED_FROM)
         if amount:
             rows.append((label, 0, -amount))
 

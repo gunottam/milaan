@@ -11,7 +11,8 @@ import dataclasses
 
 import pytest
 
-from core.models import BankLine, GatewayTxn
+from core.models import BankLine, GatewayTxn, net_contribution, target
+from core.proof import build_proof
 from matcher.gates import (MAX_WINDOW_OVERRIDE_DAYS, TOLERANCE_PAISE, g1_exclusivity,
                            g2_delta, g3_coherence, g4_outcome, g4_tolerance)
 from matcher.proposers.base import Claim
@@ -302,3 +303,51 @@ def test_g5_has_nothing_to_say_when_nothing_passed():
     failed = _verdicts(("pay_1", "rfnd_1", "rfnd_2"))
     assert not failed[0][1].ok
     assert resolve(failed) == (None, None)
+
+
+# --- the proof is the gate's own arithmetic ----------------------------------
+
+
+def test_the_proof_totals_what_the_gate_summed():
+    """I8, and the assertion that was missing until stage 11.
+
+    `Proof.total_paise` must equal `Σ net_contribution(composition)` — the sum G2
+    actually performed — for *every* composition, not just tidy ones. The case that
+    broke it: a refund carrying a non-zero `fee_paise`. §3.1 says a refund
+    contributes `-amount_paise` and nothing else, so a strip that also deducted its
+    fee showed a total the gate never computed, and the strip is what a human
+    verifies instead of precision in production (§11.1).
+    """
+    txns = {
+        "pay_1": payment("pay_1", 100_000, "setl_a", fee_paise=2_000,
+                         tax_paise=360, tds_paise=100),
+        # 86 paise of allocated premium (§4.3) on a refund. Real: thirteen of these
+        # exist on seed 42.
+        "rfnd_1": GatewayTxn(entity_id="rfnd_1", type="refund", amount_paise=25_000,
+                             settlement_id="setl_a", fee_paise=86,
+                             settled_at=f"{DAY}T18:30:00+05:30"),
+    }
+    composition = ("pay_1", "rfnd_1")
+    expected = sum(net_contribution(txns[e]) for e in composition)
+
+    proof = build_proof("bl_1", composition, txns, expected)
+    assert sum(amount for _, _, amount in proof.rows) == proof.total_paise
+    assert proof.total_paise == expected
+    assert proof.delta_paise == 0
+
+
+def test_the_proof_delta_is_the_verdict_delta():
+    """Two derivations of one number, and they may never disagree."""
+    txns = {
+        "pay_1": payment("pay_1", 100_000, "setl_a", fee_paise=2_000,
+                         tax_paise=360, tds_paise=100),
+        "rfnd_1": GatewayTxn(entity_id="rfnd_1", type="refund", amount_paise=25_000,
+                             settlement_id="setl_a", fee_paise=86,
+                             settled_at=f"{DAY}T18:30:00+05:30"),
+    }
+    total = sum(net_contribution(t) for t in txns.values())
+    line = BankLine("bl_1", DAY, DAY, "", None, 0, total, 0)
+    verdict = check(Claim("bl_1", ("pay_1", "rfnd_1"), "setl_a"), line, txns)
+    assert verdict.ok
+    assert verdict.proof.delta_paise == verdict.delta_paise == 0
+    assert verdict.proof.total_paise == target(line)

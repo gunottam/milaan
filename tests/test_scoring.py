@@ -300,11 +300,17 @@ def test_g5_refused_every_ambiguous_line(baseline):
 
 def test_no_anchor_is_wrong_on_seed_42(baseline):
     """§9.1's amendment: wherever a fragment resolved, the true settlement was among
-    the candidates. The gap between 93 recovered and 64 closed is not parsing."""
+    the candidates. The gap between 101 recovered and 64 closed is not parsing.
+
+    **`wrong == 0` is the load-bearing half and it is stage 11's revert condition.**
+    Widening `FRAGMENT_RX` hands the cascade far more candidates; the experiment was
+    to be reverted on a single wrong anchor. There is none — filters 2-4 of §9.5 are
+    G1 and G2, and neither is weakened by being offered more to reject.
+    """
     data, truth, _, trace, _ = baseline
     got = anchors_recovered(trace, truth,
                             {t.entity_id: t.settlement_id for t in data.txns})
-    assert got["recovered"] == 93 and got["wrong"] == 0
+    assert got["recovered"] == 101 and got["wrong"] == 0
 
 
 def test_the_scoreboard_renders(baseline):
@@ -319,7 +325,7 @@ def test_the_scoreboard_renders(baseline):
     text = render(report, truth, ladder,
                   anchors, at_risk, "data/runs/seed42", residue, ledger)
     assert "precision" in text and "AMBIGUOUS_SUBSET" in text
-    assert "anchors recovered 93" in text
+    assert "anchors recovered 101" in text
 
 
 def test_the_csvs_read_back_into_the_types_that_wrote_them(tmp_path, baseline):

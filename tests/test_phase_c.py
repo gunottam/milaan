@@ -55,13 +55,21 @@ def test_c1_closes_every_line_that_already_had_an_anchor(with_c1):
     TP 57 / FN 35 to TP 82 / FN 10 on the committed 40M run — recall 62.0% → 89.1%.
 
     Stage 7 measured that 25 of the 35 headline misses already carried the anchor
-    C1 needs and were missing only the residual search. C1 closes exactly 25.
+    C1 needs and were missing only the residual search. C1 closed exactly 25.
+
+    **The prediction held and then its input changed.** C1 now closes 28, not 25 —
+    not because the residual search improved but because stage 11 widened
+    `FRAGMENT_RX` and Phase A hands C1 eight more anchors than it had when the
+    prediction was registered. The claim under test was "every line that already
+    had an anchor closes", and it still holds; the population of lines that have
+    one grew. Re-baselining without saying so would have quietly converted a
+    falsifiable prediction into a description of whatever the code does.
     """
     matched, trace, report = with_c1
-    assert Counter(s["tier"] for s in trace if s["won"])["C1"] == 25
+    assert Counter(s["tier"] for s in trace if s["won"])["C1"] == 28
     head = report.counts("headline")
-    assert head == Counter({"TP": 79, "FN": 9, "TN": 13})
-    assert recall(head) == pytest.approx(0.8977, abs=1e-4)
+    assert head == Counter({"TP": 82, "FN": 6, "TN": 13})
+    assert recall(head) == pytest.approx(0.9318, abs=1e-4)
 
 
 def test_c2_refuses_far_more_than_it_closes(full):
@@ -69,12 +77,13 @@ def test_c2_refuses_far_more_than_it_closes(full):
     declining them by rule — every pool is under `C2_MAX_POOL` — and stage 4's
     pigeonhole finding says the outcome is refusals, not closures.
 
-    It holds. C2 refuses 22 of the 30 lines it reaches a verdict on: 6 to G5, and
-    16 by declining to search at all. **Not one of the 16 was refused by the pool
-    cap** — all sixteen exhausted the node budget, and at 240x that budget none of
-    them becomes a correct match (nine turn out to have two solutions, five have no
-    coherent solution in the pool, two are still unexhausted). The pigeonhole bound
-    is real; it bills as cost rather than as a pool count.
+    It holds, and it holds harder after stage 11 widened Phase A: C2 refuses 21 of
+    the 28 lines it reaches a verdict on — 6 to G5, and 15 by declining to search at
+    all. **Not one of the 15 was refused by the pool cap** — every one exhausted the
+    node budget. Two lines left C2's board entirely because C1 closed them on an
+    anchor Phase A could not previously recover, which is the ladder working as
+    ordered: a line with an identifier should never reach an unanchored search.
+    The pigeonhole bound is real; it bills as cost rather than as a pool count.
     """
     matched, trace, _ = full
     # Pass 1: what C2 does on the board Phase A, B and C1 leave it. The second
@@ -83,9 +92,9 @@ def test_c2_refuses_far_more_than_it_closes(full):
     steps = [s for s in trace if s["tier"] == "C2" and s["pass"] == 1]
     closed = [s for s in steps if s["won"]]
     declined = [s for s in steps if s["unproven"]]
-    assert len(closed) == 8
-    assert len(steps) - len(closed) == 22
-    assert len(declined) == 16
+    assert len(closed) == 7
+    assert len(steps) - len(closed) == 21
+    assert len(declined) == 15
     assert all("node budget" in s["unproven"] for s in declined)
     assert not any("C2_MAX_POOL" in s["unproven"] for s in declined)
 
@@ -100,10 +109,18 @@ def test_phase_c_fabricates_nothing(full):
     assert amb["matched"] == 0 and amb["refused"] == amb["count"]
 
 
-def test_the_full_ladder_closes_97_of_134(full):
+def test_the_full_ladder_closes_99_of_134(full):
+    """**Zero headline FN at this budget.** The two that survived stages 8-10 were
+    `bl_0083` and `bl_0102`, both `TIMING_SHIFT` with a 6-character truncated UTR
+    that `FRAGMENT_RX` refused to emit; stage 11 widened it and both close at C1.
+
+    The 8 remaining FN are all in the disclosed buckets, not the headline: 6 are
+    `SPLIT_PAYOUT` halves waiting on C3 (stage 13) and 8 sit in `unproven`, whose
+    denominator is a property of the 2M fixture budget rather than of the matcher.
+    """
     matched, _, report = full
-    assert len(matched) == 86 + 7 + 4        # headline TP + unproven TP + B2 singles
-    assert report.counts("headline") == Counter({"TP": 86, "FN": 2, "TN": 13})
+    assert len(matched) == 88 + 7 + 4        # headline TP + unproven TP + B2 singles
+    assert report.counts("headline") == Counter({"TP": 88, "TN": 13})
 
 
 # --- the cases seed 42 does not fire -----------------------------------------

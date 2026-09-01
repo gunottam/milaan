@@ -190,7 +190,7 @@ record's net exactly. That single assertion is the strongest test in the suite.
 
 ---
 
-## [ ] Stage 11 — scoreboard UI
+## [x] Stage 11 — scoreboard UI
 
 > Read `@docs/spec.md` section 13 and `@docs/spec.md` section 12 for the API. Build
 > `api/main.py` (FastAPI, polling only) and `web/` (Vite + React).

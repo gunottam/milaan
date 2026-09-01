@@ -31,7 +31,7 @@ from matcher.proposers.base import Claim, Pool
 
 # `N` + bank code + yymmdd + sequence, and the same thing with the leading N gone,
 # which is how the UPI narration template carries it.
-FRAGMENT_RX = re.compile(r"N?[A-Z]{2,6}\d{2,}")
+FRAGMENT_RX = re.compile(r"N?[A-Z]{2,6}\d+")
 SETL_RX = re.compile(r"setl_[A-Za-z0-9]+", re.IGNORECASE)
 
 MIN_FRAGMENT = 5     # §3.4 truncates to 5-8 characters; below that a prefix is noise
