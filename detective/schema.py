@@ -145,6 +145,10 @@ class Usage:
     input_tokens: int = 0
     output_tokens: int = 0
     cache_read_tokens: int = 0
+    # Accumulated per call by the provider that made it, because rates differ per
+    # vendor and per model. Recomputing this from token counts would require
+    # knowing the vendor, which is what `provider.py` exists to prevent.
+    cost_paise: int = 0
     malformed: int = 0
 
     def __add__(self, other: Usage) -> Usage:
@@ -153,6 +157,7 @@ class Usage:
             input_tokens=self.input_tokens + other.input_tokens,
             output_tokens=self.output_tokens + other.output_tokens,
             cache_read_tokens=self.cache_read_tokens + other.cache_read_tokens,
+            cost_paise=self.cost_paise + other.cost_paise,
             malformed=self.malformed + other.malformed,
         )
 

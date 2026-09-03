@@ -23,15 +23,24 @@ drops those and counts them; G1 catches anything that slips through (§7.4). A
 rising count is a prompt-quality signal, and a run that died on a bad hypothesis
 would have converted a partial answer into no answer.
 
-**Sampling parameters, and why there is no `temperature=0` here.** The brief asked
-for temperature 0 and that parameter no longer exists: `temperature`, `top_p` and
-`top_k` are rejected with a 400 on current Claude models, so setting it would break
-every request rather than pin them. The determinism the setting was for comes from
-two things instead — `output_config.effort` at the low end, and strict structured
-outputs, which constrain the response to `schema.py`'s shapes rather than asking
-the prose nicely. Neither guarantees byte-identical output across runs; nor did
-`temperature=0`, which is why §11 keeps the reproducible harness on node budget and
-reports the model's contribution separately.
+**This module does not know which vendor it is talking to.** It builds messages,
+hands them to `LLMProvider.complete()` with a schema, and reads back a parsed body
+plus tokens plus a cost in paise. Which provider, at what endpoint, priced how, and
+by which of the two routes to structured output — all of that is
+`detective/provider.py` and none of it is visible here. `effort` is passed through
+as a neutral hint because it is one; the vendor that has no equivalent knob ignores
+it.
+
+That containment is what makes the swap a config change. `DETECTIVE_PROVIDER`
+selects Groq or Anthropic, and nothing in this file, in `matcher/`, or in the
+scoreboard moves.
+
+**Determinism arrives by different routes per provider, and neither is byte-exact.**
+Groq accepts `temperature=0`; current Claude models reject sampling parameters with
+a 400 and reach the same goal through `output_config.effort` and a server-enforced
+schema. Neither guarantees identical output across runs — nor did `temperature=0` on
+the models that took it — which is why §11 keeps the reproducible harness on node
+budget and reports the model's contribution separately.
 """
 
 from __future__ import annotations
@@ -43,6 +52,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 from core.models import BankLine, GatewayTxn
 from detective import prompt as prompts
+from detective.provider import (LLMProvider, NoCredentials, build_provider,
+                                selected_name)
+from detective.provider import available as provider_available
 from detective.schema import (MAX_WINDOW_OVERRIDE_DAYS, PASS_A_SCHEMA,
                               PASS_B_SCHEMA, Hypothesis, Usage)
 from matcher.proposers.base import Claim, Pool
@@ -55,67 +67,23 @@ MAX_CONCURRENCY = 8          # §15 budgets 3 s to Pass A and 9 s to Pass B; the
                              # batches are independent, so the wall clock is the
                              # slowest batch rather than their sum.
 
-MODEL = "claude-opus-5"
-MAX_TOKENS = 16_000
-
-# Cost, in **integer paise per million tokens** (I1). Claude Opus 5 lists at
-# $5.00 / $25.00 per million input / output tokens; at ₹88.00 to the dollar that is
-# ₹440.00 and ₹2,200.00, or 44_000 and 220_000 paise.
-#
-# Integer arithmetic, and the FX rate stated rather than fetched: §11 asks for cost
-# per 1,000 records in paise, and a figure that moved with the spot rate would make
-# two runs of the same seed incomparable. `Decimal` is confined to `core/fees.py`
-# (I1), so the multiply below is `tokens * paise_per_mtok // 1_000_000` — truncating,
-# which under-reports by at most one paise per line item and is the honest direction
-# for a cost figure to be wrong in.
-USD_INR_PAISE = 88_00                    # ₹88.00, stated. Verify before demo day.
-PRICE_IN_PAISE_PER_MTOK = 5 * USD_INR_PAISE
-PRICE_OUT_PAISE_PER_MTOK = 25 * USD_INR_PAISE
-CACHE_READ_DIVISOR = 10                  # cache reads bill at ~0.1x input
-
-
-def cost_paise(usage: Usage) -> int:
-    """What a pass cost, in `int` paise (I1)."""
-    return (usage.input_tokens * PRICE_IN_PAISE_PER_MTOK // 1_000_000
-            + usage.output_tokens * PRICE_OUT_PAISE_PER_MTOK // 1_000_000
-            + usage.cache_read_tokens * PRICE_IN_PAISE_PER_MTOK
-            // (1_000_000 * CACHE_READ_DIVISOR))
-
 
 def cost_per_1k_records(usage: Usage, records: int) -> int:
-    """§11's `cost per 1k records`, in paise. Zero records is zero cost, not a
-    division error — an ablated run has no usage and must still render."""
-    return cost_paise(usage) * 1_000 // records if records else 0
+    """§11's `cost per 1k records`, in paise (I1).
 
-
-class NoCredentials(RuntimeError):
-    """No way to reach the API.
-
-    **Raised on first use, never at construction, and caught by `prepare()`.** The
-    first draft raised in `__init__`, which meant a missing key killed the whole
-    run — and a run without the detective is perfectly viable: it is the ablated
-    configuration, and §11 asks for it by name. So the tier constructs, the pass
-    records a refusal, and the board reports deterministic recall with the model
-    absent rather than reporting nothing at all.
+    The cost itself is accumulated per call by whichever provider made it — rates
+    differ per vendor and per model, so a figure recomputed from token counts here
+    would have to know the vendor, which is exactly what `provider.py` exists to
+    prevent. Zero records is zero cost, not a division error: an ablated run has no
+    usage and must still render.
     """
+    return usage.cost_paise * 1_000 // records if records else 0
 
 
 def available() -> bool:
-    """Can this process call the API at all?
-
-    An unset `ANTHROPIC_API_KEY` does not mean there are no credentials — the SDK
-    resolves an `ant auth login` profile too, so the only honest check is whether
-    the package imports and a client constructs.
-    """
-    try:
-        import anthropic
-    except ImportError:
-        return False
-    try:
-        anthropic.Anthropic()
-    except Exception:                      # noqa: BLE001 — any auth failure is a no
-        return False
-    return True
+    """Can the selected provider be reached? Delegated, because the answer is a
+    fact about a vendor and this module does not know which one is selected."""
+    return provider_available()
 
 
 class DetectiveProposer:
@@ -128,13 +96,20 @@ class DetectiveProposer:
     """
 
     def __init__(self, tier: str, txns: Iterable[GatewayTxn],
-                 window_days: int = 2, *, client=None,
-                 model: str = MODEL) -> None:
+                 window_days: int = 2, *, provider: LLMProvider | None = None,
+                 client=None) -> None:
         if tier not in ("D1", "D2"):
             raise ValueError(f"tier must be D1 or D2, not {tier!r}")
         self.name = tier
         self.window_days = window_days
-        self.model = model
+        # Injected by the tests with a fake; otherwise built lazily from
+        # `DETECTIVE_PROVIDER`. Construction never touches a credential, so the
+        # laziness is about *reaching* the vendor, not about naming it.
+        self._provider = provider
+        # The older injection point: a bare vendor client the selected provider
+        # wraps. Kept because it is how a caller substitutes a transport without
+        # having to know which provider will be chosen.
+        self._raw_client = client
         self._txns = {t.entity_id: t for t in txns}
         self._utr_to_settlement = {
             t.settlement_utr: t.settlement_id for t in self._txns.values()
@@ -154,30 +129,36 @@ class DetectiveProposer:
         # Same field name the search tiers expose, so the trace and the exception
         # ledger read a declined detective pass exactly as they read a declined C2.
         self.refusals: dict[str, str] = {}
-        # Deferred. Constructing a client here would make a missing API key fatal
-        # to the whole ladder — see `NoCredentials`.
-        self._client = client
-        self._client_failed = False
 
-    def _client_or_raise(self):
-        if self._client is None:
-            self._client = self._build_client()
-        return self._client
+    @property
+    def provider(self) -> LLMProvider:
+        """The selected provider, built on first use.
 
-    def _build_client(self):
+        Lazy so that an unknown `DETECTIVE_PROVIDER` or a missing key surfaces
+        where `prepare()` can catch it, rather than at tier-construction time
+        where it would take the whole ladder down.
+        """
+        if self._provider is None:
+            try:
+                self._provider = build_provider(client=self._raw_client)
+            except ValueError as exc:
+                # A misconfigured `DETECTIVE_PROVIDER` is the detective being
+                # unavailable, not a malformed hypothesis and not a reason to lose
+                # an otherwise complete deterministic board. `selected_name()`
+                # still raises for anyone who asks for a provider by name.
+                raise NoCredentials(str(exc)) from exc
+        return self._provider
+
+    @property
+    def model(self) -> str:
+        """`provider:model`, for the board. The tier reports which model produced
+        its hypotheses without ever branching on the answer."""
         try:
-            import anthropic
-        except ImportError as exc:
-            raise NoCredentials(
-                "the anthropic SDK is not installed; run the ladder without the "
-                "detective (that is the ablated configuration) or "
-                "`pip install anthropic`") from exc
-        try:
-            return anthropic.Anthropic()
-        except Exception as exc:           # noqa: BLE001
-            raise NoCredentials(
-                "no API credentials resolved — set ANTHROPIC_API_KEY or run "
-                "`ant auth login`") from exc
+            return f"{self.provider.name}:{self.provider.model}"
+        except Exception:                  # noqa: BLE001 — never raises
+            # Must not raise: the board reads this to label a pass that never ran,
+            # and a misconfigured provider is exactly when it is called.
+            return "misconfigured"
 
     # --- the Proposer protocol ---------------------------------------------
 
@@ -346,56 +327,39 @@ class DetectiveProposer:
 
     def _call(self, system: str, user: str, output_schema: dict,
               *, effort: str) -> dict:
-        """One request. Strict structured outputs; adaptive thinking.
+        """One provider call, priced and counted. Returns the parsed body.
 
-        `output_config.format` constrains the response to the schema rather than the
-        prompt asking for JSON and a parser hoping — a malformed hypothesis becomes
-        a named validation outcome instead of a `JSONDecodeError` mid-run.
+        **Everything vendor-specific happens on the other side of this line.**
+        Messages in, schema in, body out — plus tokens and a cost in paise the
+        provider computed from its own rates. Which of the two routes to structured
+        output was taken, and whether a local validator had to enforce the schema,
+        is not visible here and must not be: a branch on the provider's name in
+        this method would be the vendor leaking back in.
 
-        The system prompt carries a cache breakpoint: it is byte-identical across
-        every batch in a pass, so the second and later batches read it rather than
-        paying for it. That is the whole of the caching strategy — the batch body
-        varies, so nothing after it is cacheable.
+        `NoCredentials` is re-raised for `prepare()` to type apart. Everything else
+        is counted — a failed batch returns `{}` and the run continues (§9.6).
         """
-        try:
-            response = self._client_or_raise().messages.create(
-                model=self.model,
-                max_tokens=MAX_TOKENS,
-                system=[{"type": "text", "text": system,
-                         "cache_control": {"type": "ephemeral"}}],
-                thinking={"type": "adaptive"},
-                output_config={"effort": effort,
-                               "format": {"type": "json_schema",
-                                          "schema": output_schema}},
-                messages=[{"role": "user", "content": user}],
-            )
-        except NoCredentials:
-            raise                          # `prepare()` types this apart
-        except Exception as exc:           # noqa: BLE001 — counted, never raised
-            self.usage += Usage(calls=1, malformed=1)
-            self.refusals.setdefault(
-                "_pass", f"MALFORMED_HYPOTHESIS: {type(exc).__name__}: {exc}")
-            return {}
+        completion = self.provider.complete(
+            [{"role": "system", "content": system},
+             {"role": "user", "content": user}],
+            output_schema, effort=effort)
 
-        u = response.usage
+        # Schema-invalid items the provider dropped are malformed hypotheses in
+        # exactly the sense §9.6 means, so they land in the same counter as a
+        # composition citing a non-existent entity. A whole batch that failed
+        # counts as one.
         self.usage += Usage(
             calls=1,
-            input_tokens=u.input_tokens,
-            output_tokens=u.output_tokens,
-            cache_read_tokens=getattr(u, "cache_read_input_tokens", 0) or 0)
+            input_tokens=completion.input_tokens,
+            output_tokens=completion.output_tokens,
+            cache_read_tokens=completion.cache_read_tokens,
+            cost_paise=completion.cost_paise,
+            malformed=completion.dropped_items + (1 if completion.failure else 0))
 
-        # A refusal is a content outcome on current models, not an exception: the
-        # request returns 200 with an empty or partial body. Reading content[0]
-        # unconditionally would break on it.
-        if response.stop_reason == "refusal":
-            self.usage += Usage(malformed=1)
-            return {}
-        text = next((b.text for b in response.content if b.type == "text"), "")
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            self.usage += Usage(malformed=1)
-            return {}
+        if completion.failure:
+            self.refusals.setdefault(
+                "_pass", f"MALFORMED_HYPOTHESIS: {completion.failure}")
+        return completion.body
 
     # --- what the orchestrator drives --------------------------------------
 

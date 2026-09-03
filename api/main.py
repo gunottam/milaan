@@ -38,6 +38,7 @@ from generator.config import (SETTLEMENT_WINDOW_DAYS,
                               UNIQUENESS_NODE_BUDGET_OFFLINE)
 from generator.generate import emit, generate
 from detective.propose import available as detective_available
+from detective.provider import selected_name as selected_provider
 from matcher.run import MATCH_DEADLINE_MS, build_tiers, run_ladder
 from scoring.score import (BUCKETS, DISCLOSED, all_lines, phase_e, precision,
                            recall, score)
@@ -138,7 +139,6 @@ def build_report(run_dir: Path, deadline_ms: int | None = MATCH_DEADLINE_MS,
     counts = report.counts("headline")
     every = all_lines(report)
     # Phase D's own accounting, read off the tier objects the ladder used.
-    from detective.propose import cost_paise as detective_cost
     from detective.propose import cost_per_1k_records as detective_cost_per_1k
     from detective.schema import Usage
     phase_d = [t for t in ladder.tiers if getattr(t, "name", "") in ("D1", "D2")]
@@ -270,11 +270,19 @@ def build_report(run_dir: Path, deadline_ms: int | None = MATCH_DEADLINE_MS,
                         "input_tokens": t.usage.input_tokens,
                         "output_tokens": t.usage.output_tokens,
                         "malformed": t.usage.malformed,
-                        "cost_paise": detective_cost(t.usage),
+                        "cost_paise": t.usage.cost_paise,
+                        "model": t.model,
                         "anchors_recovered": len(
                             getattr(t, "recovered_anchors", {}))}
                        for t in phase_d],
-            "cost_paise": detective_cost(total_usage),
+            "provider": selected_provider(),
+            "cost_paise": total_usage.cost_paise,
+            # The malformed rate as a rate, per hypothesis offered — comparable
+            # across batch sizes and across vendors, which is the point when the
+            # provider is swappable.
+            "hypotheses_offered": sum(len(t.hypotheses) for t in phase_d)
+                                  + total_usage.malformed,
+            "malformed": total_usage.malformed,
             "cost_per_1k_records_paise": detective_cost_per_1k(
                 total_usage, len(txns)),
         },

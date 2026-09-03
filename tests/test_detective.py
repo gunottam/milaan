@@ -19,8 +19,8 @@ import json
 import pytest
 
 from core.models import BankLine, GatewayTxn
-from detective.propose import (DetectiveProposer, cost_paise,
-                               cost_per_1k_records)
+from detective.propose import DetectiveProposer, cost_per_1k_records
+from detective.provider import Completion, NoCredentials
 from detective.schema import MAX_WINDOW_OVERRIDE_DAYS, Usage
 from matcher.proposers.base import Claim
 from matcher.verify import check
@@ -41,43 +41,38 @@ def bank_line(credit: int, narration: str = "", ref_no: str | None = None,
     return BankLine(bank_line_id, DAY, DAY, narration, ref_no, 0, credit, 0)
 
 
-class FakeClient:
-    """Returns canned bodies in order and records what it was asked.
+class FakeProvider:
+    """A provider that returns canned bodies and records what it was asked.
 
-    Shaped like the SDK's surface only as far as `propose.py` uses it — one
-    `messages.create` returning an object with `content`, `usage` and `stop_reason`.
-    A fuller mock would be asserting the SDK's behaviour rather than ours.
+    **The fake sits at the vendor boundary, not inside it.** `DetectiveProposer`
+    talks to `LLMProvider`, so that is what the tests substitute — which is also
+    the assertion that the boundary is real: none of the tests below could tell
+    you whether Groq or Anthropic was selected, because the proposer cannot
+    either. The vendors' own translations are `tests/test_provider.py`'s business.
     """
 
-    def __init__(self, *bodies: dict, stop_reason: str = "end_turn") -> None:
+    name = "fake"
+    model = "fake-1"
+
+    def __init__(self, *bodies: dict, failure: str | None = None,
+                 dropped: int = 0) -> None:
         self._bodies = list(bodies)
-        self.stop_reason = stop_reason
+        self.failure = failure
+        self.dropped = dropped
         self.calls: list[dict] = []
-        self.messages = self
 
-    def create(self, **kwargs):
-        self.calls.append(kwargs)
+    def complete(self, messages, schema, *, effort="medium") -> Completion:
+        self.calls.append({"messages": list(messages), "schema": schema,
+                           "effort": effort})
         body = self._bodies.pop(0) if self._bodies else {}
-
-        class _Block:
-            type = "text"
-            text = json.dumps(body)
-
-        class _Usage:
-            input_tokens = 1_000
-            output_tokens = 200
-            cache_read_input_tokens = 0
-
-        class _Response:
-            content = [_Block()]
-            usage = _Usage()
-            stop_reason = self.stop_reason
-
-        return _Response()
+        return Completion(body, input_tokens=1_000, output_tokens=200,
+                          cost_paise=880, failure=self.failure,
+                          dropped_items=self.dropped)
 
 
 def detective(tier: str, txns, *bodies: dict, **kw) -> DetectiveProposer:
-    return DetectiveProposer(tier, txns, client=FakeClient(*bodies, **kw))
+    """A proposer wired to a fake provider. No vendor, no network, no key."""
+    return DetectiveProposer(tier, txns, provider=FakeProvider(*bodies, **kw))
 
 
 # --- I9 / I8: no privileged path ---------------------------------------------
@@ -195,24 +190,42 @@ def test_a_window_override_past_the_cap_is_refused():
     assert d.usage.malformed == 1
 
 
-def test_an_api_failure_is_counted_not_raised():
-    """A pass that died would convert a partial answer into no answer."""
+def test_a_provider_that_raises_is_still_not_fatal():
+    """A pass that died would convert a partial answer into no answer. Providers
+    are written to report rather than raise, but a badly-behaved one must not take
+    the ladder down either."""
     class Boom:
-        def __init__(self): self.messages = self
-        def create(self, **kw): raise RuntimeError("503")
+        name, model = "boom", "boom-1"
+        def complete(self, messages, schema, *, effort="medium"):
+            raise RuntimeError("503")
 
-    d = DetectiveProposer("D2", [payment("pay_1", 1, "setl_a")], client=Boom())
-    assert d.run_pass_b([bank_line(1)], {}) == []
-    assert d.usage.malformed >= 1
+    d = DetectiveProposer("D2", [payment("pay_1", 1, "setl_a")], provider=Boom())
+    line = bank_line(1)
+    d.prepare([line], {})
+    assert d.propose(line, []) == []
+    assert d.refusals[line.bank_line_id].startswith("MALFORMED_HYPOTHESIS")
 
 
-def test_a_refusal_is_a_content_outcome_not_an_exception():
-    """On current models a declined request returns 200 with an empty body — code
-    that read `content[0]` unconditionally would break on it."""
+def test_a_provider_reported_failure_is_counted_not_raised():
+    """A refusal, an unparseable payload, a truncated JSON body — every provider
+    reports these as a `failure` on the completion rather than by raising, and the
+    proposer counts them. On both vendors a declined request is a *content*
+    outcome, so code that read the first block unconditionally would break."""
     d = detective("D1", [payment("pay_1", 1, "setl_a", UTR)],
-                  {"readings": []}, stop_reason="refusal")
+                  {}, failure="the model declined the request")
     assert d.run_pass_a([bank_line(1)]) == []
     assert d.usage.malformed == 1
+    assert d.usage.calls == 1, "a failed call still cost something"
+
+
+def test_items_the_provider_dropped_are_counted_as_malformed():
+    """The Groq path validates locally and drops schema-invalid items; those are
+    malformed hypotheses in exactly §9.6's sense, so they land in the same counter
+    as a composition citing a non-existent entity."""
+    d = detective("D2", [payment("pay_1", 1, "setl_a")],
+                  {"hypotheses": []}, dropped=3)
+    d.run_pass_b([bank_line(1)], {})
+    assert d.usage.malformed == 3
 
 
 # --- I10 and the prompt whitelists ------------------------------------------
@@ -335,37 +348,49 @@ def test_pass_a_batches_twenty_five_and_pass_b_five():
 
     a = detective("D1", txns, *[{"readings": []}] * 3)
     a.run_pass_a(lines)
-    assert len(a._client.calls) == 3, "60 lines / 25 = 3 batches"
+    assert len(a._provider.calls) == 3, "60 lines / 25 = 3 batches"
 
     b = detective("D2", txns, *[{"hypotheses": []}] * 12)
     b.run_pass_b(lines, {})
-    assert len(b._client.calls) == 12, "60 lines / 5 = 12 batches"
+    assert len(b._provider.calls) == 12, "60 lines / 5 = 12 batches"
 
 
-def test_the_request_carries_strict_json_and_no_sampling_parameters():
-    """Sampling parameters are rejected on current models, so `temperature=0` is
-    not available; strict structured outputs are what pin the response shape."""
-    d = detective("D1", [payment("pay_1", 1, "setl_a", UTR)], {"readings": []})
-    d.run_pass_a([bank_line(1)])
-    sent = d._client.calls[0]
+def test_the_proposer_hands_the_schema_and_an_effort_hint_to_the_protocol():
+    """What the proposer owes the boundary: the pass's schema and a neutral effort
+    hint. *How* either is honoured is the provider's business — Anthropic maps
+    effort to `output_config.effort`, Groq ignores it and pins `temperature=0`."""
+    from detective.schema import PASS_A_SCHEMA, PASS_B_SCHEMA
 
-    assert "temperature" not in sent and "top_p" not in sent and "top_k" not in sent
-    fmt = sent["output_config"]["format"]
-    assert fmt["type"] == "json_schema"
-    assert fmt["schema"]["additionalProperties"] is False
-    assert sent["thinking"] == {"type": "adaptive"}
-    assert sent["system"][0]["cache_control"] == {"type": "ephemeral"}
+    a = detective("D1", [payment("pay_1", 1, "setl_a", UTR)], {"readings": []})
+    a.run_pass_a([bank_line(1)])
+    assert a._provider.calls[0]["schema"] is PASS_A_SCHEMA
+    assert a._provider.calls[0]["effort"] == "low", "reading text is not deep work"
+
+    b = detective("D2", [payment("pay_1", 1, "setl_a")], {"hypotheses": []})
+    b.run_pass_b([bank_line(1)], {})
+    assert b._provider.calls[0]["schema"] is PASS_B_SCHEMA
+    assert b._provider.calls[0]["effort"] == "high", "composing a subset is"
+
+    roles = [m["role"] for m in b._provider.calls[0]["messages"]]
+    assert roles == ["system", "user"], (
+        "provider-neutral message list — the Anthropic path lifts the system turn "
+        "into its own parameter, the Groq path passes it through")
 
 
 def test_cost_is_integer_paise_and_per_1k_records():
-    """I1: `int` paise everywhere, and §11's cost-per-1k-records line."""
-    usage = Usage(calls=1, input_tokens=1_000_000, output_tokens=100_000)
-    total = cost_paise(usage)
-    assert isinstance(total, int)
-    # 1M in at 44,000 paise/MTok + 100k out at 220,000 paise/MTok
-    assert total == 44_000 + 22_000
-    assert cost_per_1k_records(usage, 3_000) == total * 1_000 // 3_000
+    """I1: `int` paise everywhere, and §11's cost-per-1k-records line.
+
+    The cost is accumulated by the provider that made the call, so this asserts
+    the accumulation and the per-1k arithmetic — the rate tables themselves are
+    `test_provider.py`'s business, because they are the one thing that differs
+    between vendors.
+    """
+    usage = Usage(calls=1, input_tokens=1_000_000, output_tokens=100_000,
+                  cost_paise=66_000)
+    assert isinstance(usage.cost_paise, int)
+    assert cost_per_1k_records(usage, 3_000) == 66_000 * 1_000 // 3_000
     assert cost_per_1k_records(usage, 0) == 0, "an ablated run must still render"
+    assert (usage + usage).cost_paise == 132_000, "costs add across passes"
 
 
 def test_the_ablation_is_a_filter_over_the_tier_list():
@@ -380,25 +405,51 @@ def test_the_ablation_is_a_filter_over_the_tier_list():
 
 
 def test_a_missing_credential_degrades_to_the_ablated_run():
-    """The board must still render. A run without the detective is the ablated
-    configuration, which §11 asks for by name — it is not a failure state."""
-    from detective.propose import NoCredentials
+    """The board must still render, whichever provider is selected. A run without
+    the detective is §11's ablated configuration — not a failure state — so a
+    missing `GROQ_API_KEY` is an ablated run rather than a crash."""
+    class Unconfigured:
+        name, model = "groq", "llama-3.3-70b-versatile"
+        def complete(self, messages, schema, *, effort="medium"):
+            raise NoCredentials("GROQ_API_KEY is not set")
 
-    class NoAuth:
-        def __init__(self): self.messages = self
-        def create(self, **kw): raise AssertionError("must not be reached")
-
-    d = DetectiveProposer("D1", [payment("pay_1", 1, "setl_a", UTR)])
-    assert d._client is None, "no client is built at construction"
-
-    def boom():
-        raise NoCredentials("no API credentials resolved")
-    d._build_client = boom
-
+    d = DetectiveProposer("D1", [payment("pay_1", 1, "setl_a", UTR)],
+                          provider=Unconfigured())
     line = bank_line(1)
     d.prepare([line], {})
+
     assert d.propose(line, []) == []
     assert d.refusals[line.bank_line_id].startswith("DETECTIVE_UNAVAILABLE")
     assert d.usage.malformed == 0, (
         "the pass never ran, so nothing was malformed — 'absent' and 'had nothing "
         "to offer' score alike and are not the same fact")
+
+
+def test_no_provider_is_built_at_construction():
+    """Construction must not touch a credential: an unknown DETECTIVE_PROVIDER or
+    a missing key has to surface where `prepare()` can catch it, not where it
+    would take the whole ladder down."""
+    d = DetectiveProposer("D1", [payment("pay_1", 1, "setl_a", UTR)])
+    assert d._provider is None
+    # Naming the model is still safe — it reads config, not credentials.
+    assert ":" in d.model
+
+
+def test_a_misconfigured_provider_degrades_instead_of_crashing_the_board(monkeypatch):
+    """A typo in `DETECTIVE_PROVIDER` is the detective being unavailable — not a
+    reason to lose an otherwise complete deterministic board.
+
+    Found by dry-running the scoreboard with `DETECTIVE_PROVIDER=gorq`, which
+    tracebacked out of the CLI: the `model` property called `selected_name()` in
+    its own fallback path and re-raised. `model` must never raise, because the
+    board reads it precisely when a pass did not run.
+    """
+    monkeypatch.setenv("DETECTIVE_PROVIDER", "gorq")
+    d = DetectiveProposer("D1", [payment("pay_1", 1, "setl_a", UTR)])
+    line = bank_line(1)
+
+    assert d.model == "misconfigured"
+    d.prepare([line], {})
+    assert d.refusals[line.bank_line_id].startswith("DETECTIVE_UNAVAILABLE")
+    assert "gorq" in d.refusals[line.bank_line_id]
+    assert d.usage.malformed == 0

@@ -344,7 +344,7 @@ def ablation_line(ladder: Run, records: int) -> list[str]:
     A run with no detective tier prints what is missing rather than a zero: absent
     and "contributed nothing" render identically and are not the same fact.
     """
-    from detective.propose import cost_paise, cost_per_1k_records
+    from detective.propose import cost_per_1k_records
 
     passes = [t for t in (ladder.tiers or ()) if getattr(t, "name", "") in ("D1", "D2")]
     if not passes:
@@ -354,17 +354,33 @@ def ablation_line(ladder: Run, records: int) -> list[str]:
     total = sum((t.usage for t in passes), start=passes[0].usage.__class__())
     for t in passes:
         u = t.usage
-        out.append(f"  {t.name}   {u.calls:>3} calls   "
+        out.append(f"  {t.name}   {t.model:<34}{u.calls:>3} calls   "
                    f"{u.input_tokens:>7,} in  {u.output_tokens:>6,} out   "
-                   f"{fmt_inr(cost_paise(u)):>10}   "
+                   f"{fmt_inr(u.cost_paise):>10}   "
                    f"malformed {u.malformed}")
-    unavailable = [t.name for t in passes
-                   if any(r.startswith("DETECTIVE_UNAVAILABLE")
-                          for r in t.refusals.values())]
-    if unavailable:
-        out.append(f"  !! {', '.join(unavailable)} never ran — no API credentials "
-                   "resolved. This board is the ablated configuration.")
-    out.append(f"  cost {fmt_inr(cost_paise(total))} total, "
+    # The reason is read off the refusal rather than assumed: "no key" and
+    # "misconfigured provider" both stop the pass and a board that guessed between
+    # them would send someone looking in the wrong place.
+    unavailable = {t.name: next(
+        (r.split(": ", 1)[-1] for r in t.refusals.values()
+         if r.startswith("DETECTIVE_UNAVAILABLE")), None) for t in passes}
+    stopped = {n: why for n, why in unavailable.items() if why}
+    if stopped:
+        out.append(f"  !! {', '.join(sorted(stopped))} never ran — "
+                   f"{next(iter(stopped.values()))}")
+        out.append("     This board is the ablated configuration (§11).")
+    # The malformed rate, as a rate. A provider whose JSON mode is a weaker
+    # guarantee than a server-enforced schema shows up here rather than in a
+    # traceback: hypotheses that failed local validation are dropped and counted,
+    # so a high figure is a finding about the provider and not a bug being papered
+    # over. Denominator is hypotheses offered, which is what makes it comparable
+    # across batch sizes and across vendors.
+    offered = sum(len(t.hypotheses) for t in passes) + total.malformed
+    if offered:
+        out.append(f"  malformed {total.malformed} of {offered} hypotheses offered "
+                   f"({total.malformed * 100 // offered}%) — schema-invalid or "
+                   "unusable, dropped and counted, never raised")
+    out.append(f"  cost {fmt_inr(total.cost_paise)} total, "
                f"{fmt_inr(cost_per_1k_records(total, records))} per 1,000 records "
                f"(§11, in paise)")
     return out

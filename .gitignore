@@ -8,3 +8,4 @@ web/dist/
 web/check-strip.bundle.*
 web/check-strip.entry.*
 .DS_Store
+.env
