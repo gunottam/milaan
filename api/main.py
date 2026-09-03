@@ -34,10 +34,12 @@ from pydantic import BaseModel, Field
 
 from core.models import BankLine, GatewayTxn, Order, read_csv, target
 from generator.config import (SETTLEMENT_WINDOW_DAYS,
-                              UNIQUENESS_NODE_BUDGET_LIVE)
+                              UNIQUENESS_NODE_BUDGET_DEMO,
+                              UNIQUENESS_NODE_BUDGET_OFFLINE)
 from generator.generate import emit, generate
 from matcher.run import MATCH_DEADLINE_MS, run_ladder
-from scoring.score import BUCKETS, DISCLOSED, phase_e, precision, recall, score
+from scoring.score import (BUCKETS, DISCLOSED, all_lines, phase_e, precision,
+                           recall, score)
 
 RUNS = Path("data/runs")
 
@@ -131,6 +133,7 @@ def build_report(run_dir: Path, deadline_ms: int | None = MATCH_DEADLINE_MS,
     report = score(truth, compositions)
 
     counts = report.counts("headline")
+    every = all_lines(report)
     lines = {b.bank_line_id: b for b in bank_lines}
     tiers = {tier for tier, _, _ in ladder.matched.values()}
 
@@ -194,6 +197,14 @@ def build_report(run_dir: Path, deadline_ms: int | None = MATCH_DEADLINE_MS,
         # and `buckets` is what it must render beside it: every line held out of the
         # headline, by name, with its own outcome counts.
         "headline_n": sum(counts.values()),
+        # The complete figure, shipped beside the narrow one so the UI can print
+        # both on the same line. A board that shows 100% next to "35 open" has to
+        # answer for it on the surface, not behind a control.
+        "all_lines": {
+            "counts": dict(every), "n": sum(every.values()),
+            "precision": precision(every), "recall": recall(every),
+            "fn_held_out": every["FN"] - counts["FN"],
+        },
         "buckets": [{"name": name, "blurb": BUCKETS[name],
                      "counts": dict(report.counts(name)),
                      "n": sum(report.counts(name).values()),
@@ -253,9 +264,10 @@ def run_notes(request: RunRequest) -> list[str]:
     arrives at stage 12, and reporting `use_llm: true` as satisfied would put a
     number on the screen that no code produced.
     """
-    notes = [f"uniqueness verified at {UNIQUENESS_NODE_BUDGET_LIVE:,} nodes (the "
-             "live budget) — bucket sizes do not compare with a committed offline "
-             "board"]
+    notes = [f"uniqueness verified at {UNIQUENESS_NODE_BUDGET_DEMO:,} nodes — the "
+             f"demo budget, which reaches the same verified population as the "
+             f"{UNIQUENESS_NODE_BUDGET_OFFLINE:,} offline run; a handful of lines "
+             "remain unproven and are disclosed by bucket"]
     if request.use_llm:
         notes.append("use_llm was requested and ignored: Detective Pass A/B is "
                      "stage 12. Every match below is deterministic.")
@@ -271,13 +283,12 @@ def _execute(state: RunState) -> None:
             state.request.seed, state.request.bank_lines, state.request.records,
             state.request.noise, SETTLEMENT_WINDOW_DAYS,
             time.strftime("%Y-%m-%dT%H:%M:%S+05:30"),
-            # The LIVE budget, not the offline one (§10.1). Offline generation has
-            # no wall clock to answer to and runs at 40M nodes; a request that did
-            # that would sit for minutes. The consequence is real and the scoreboard
-            # already shouts about it: at 20k, more lines land in `unproven` and
-            # fewer are proven `AMBIGUOUS_SUBSET`, so these counts do not compare
-            # with a committed offline board.
-            UNIQUENESS_NODE_BUDGET_LIVE)
+            # The DEMO budget, measured at stage 11b — see `generator/config.py`
+            # for the sweep. The old live 20k generated in under a second and put
+            # 57 of 134 lines in `unproven`, which meant the browser was measuring
+            # a materially different board from the one in the journals. 5M reaches
+            # the same `verified` population the 40M offline run does.
+            UNIQUENESS_NODE_BUDGET_DEMO)
         _touch(state, phase="verifying_uniqueness", progress=0.25,
                bank_lines=len(data.bank_lines))
         emit(run_dir, data, truth)

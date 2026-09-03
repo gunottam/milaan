@@ -20,6 +20,41 @@ SETTLEMENT_WINDOW_DAYS = 2
 UNIQUENESS_NODE_BUDGET_OFFLINE = 40_000_000
 UNIQUENESS_NODE_BUDGET_LIVE = 20_000
 
+# The budget a browser-triggered run generates at. **Measured, stage 11b**, seed 42,
+# 120 payouts / 3,000 records, sweeping between the live 20k and the offline 40M:
+#
+#     budget       gen s   unproven   verified   ambiguous
+#     20,000         0.8         57         52           2
+#     50,000         1.1         44         65           2
+#     100,000        1.7         37         70           4
+#     250,000        2.9         26         80           5
+#     500,000        4.5         22         84           5
+#     1,000,000      7.4         20         86           5
+#     2,000,000     12.3         15         88           8
+#     5,000,000     18.7          6         92          13   <- the knee
+#     10,000,000    25.8          4         92          15
+#     20,000,000    35.2          3         92          16
+#     40,000,000    53.9          3         92          16
+#
+# 20k put 57 of 134 lines in `unproven` and left `verified` at 52, so the demo was
+# measuring a materially different board from the journals. **`verified` reaches its
+# ceiling of 92 at 5M — the same figure the 40M offline run reports** — and beyond
+# that only three lines move, out of `unproven` and into `AMBIGUOUS_SUBSET`. So 5M
+# buys the whole headline population for 18.7 s.
+#
+# That overruns §15's 6 s generation line and fits its 60 s ceiling: 18.7 s to
+# generate plus ~11 s to match is ~30 s end to end. The overrun is deliberate and
+# stated rather than hidden — a demo that generates fast and then measures a
+# different board than the one in the journals is the worse trade.
+#
+# **Two side findings, recorded and not acted on.** 20M is indistinguishable from
+# 40M (3 unproven, 92 verified, 16 ambiguous) at 35 s against 54 s, so the offline
+# budget is ~19 s of pure waste; and `verified` plateaus at 92, which means the 42
+# lines outside it are not budget-limited at all. Changing the offline budget would
+# regenerate the committed board and move every pinned count in the suite, so it is
+# a separate decision.
+UNIQUENESS_NODE_BUDGET_DEMO = 5_000_000
+
 # `C2_MAX_POOL` is imported above, not declared here. Generation sizes its payouts
 # so a window pool stays under it; C2 refuses above it rather than searching. Two
 # copies of that number would let the dataset and the matcher disagree about where

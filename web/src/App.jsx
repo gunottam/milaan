@@ -141,10 +141,26 @@ function Summary({ run, report }) {
         <span className="label">·</span>
         <span className="figure">via hypothesis {report.via_hypothesis}</span>
         <span className="label">·</span>
-        {/* The denominator, in the label. Not implied, not a footnote. */}
         <span className="figure">precision {pct(report.precision)}</span>
+      </div>
+
+      {/* **Both figures on one line, above the fold.** `recall 100.0%` beside
+          `35 open` is a contradiction from the reader's side, and the resolution —
+          that the headline bucket is 65 of 134 lines — must not be something they
+          go looking for. The complete number is the unarguable one, so it sits next
+          to the narrow one and neither is printed alone. */}
+      <div className="summary-line recall-line">
         <span className="figure">recall {pct(report.recall)}</span>
-        <span className="qualifier">(verified-unique, n={n})</span>
+        <span className="qualifier">over verified-unique (n={n})</span>
+        <span className="label">·</span>
+        <span className="qualifier">
+          {report.all_lines.fn_held_out} FN in disclosed buckets
+        </span>
+        <span className="label">·</span>
+        <span className="figure complete">
+          all-lines recall {pct(report.all_lines.recall)}
+        </span>
+        <span className="qualifier">(n={report.all_lines.n})</span>
         <button className="more inline" onClick={() => setShowBuckets(!showBuckets)}>
           {showBuckets ? 'hide' : 'show'} all {buckets.length} scored buckets
         </button>

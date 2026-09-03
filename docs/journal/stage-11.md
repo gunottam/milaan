@@ -5,7 +5,7 @@ Written for someone who knows `docs/spec.md` and has not read the code.
 Spec sections read: **§12** (API), **§13** (UI). Plus the experiment stage 10 recorded
 and declined to run.
 
-`pytest -q`: **220 passed, 0 skipped** (212 at first commit; stage 11a below adds 8). Twelve are new in `tests/test_api.py`,
+`pytest -q`: **221 passed, 0 skipped** (212 at first commit; stages 11a and 11b below add 9). Twelve are new in `tests/test_api.py`,
 two in `tests/test_gates.py`, and seven pinned counts moved and were re-pinned to measured
 values.
 
@@ -503,3 +503,155 @@ ok    the caret flips to ▾ when open
 It expands in place. What the screenshots were missing is that **nothing said the row
 was clickable** — there was no affordance at all. Every expandable row now carries a
 `▸`/`▾` caret in the margin, is focusable, and responds to Enter and Space.
+
+---
+
+# Stage 11b — the complete figure, and the budget that was hiding it
+
+Seven items. The first two changed what the board claims; five were presentation.
+
+`pytest -q`: **221 passed.** `cd web && npm run check` now asserts items 4–7 as
+well, so none of them can regress into a screenshot nobody checks.
+
+---
+
+## 1. The complete recall figure, above the fold
+
+The narrow figure was labelled and the complete one was not printed at all. Both now
+sit on adjacent lines, in ink, at the same weight:
+
+```
+  precision 100.0% (verified-unique, n=105)        recall 100.0% (verified-unique, n=105)
+  ALL LINES  TP   99  FP    0  FN    6  TN   29   precision 100.0%   recall  94.3%  (n=134)
+  6 of those FN are in the disclosed buckets below, held out of the headline figure.
+```
+
+On the browser board (demo budget, live deadline) that reads
+`recall 100.0% over verified-unique (n=105) · 9 FN in disclosed buckets ·
+all-lines recall 91.7% (n=134)`.
+
+`all_lines()` is a named function in `scoring/score.py` rather than
+`report.counts()` with the default argument, because the complete denominator is
+the number a reader checks the board against and a default argument is not
+something anybody reads. The API ships it as `all_lines` beside `counts`, and the
+UI prints the complete figure with an underline — demoting it typographically
+would be the same evasion as hiding it behind a control, done with CSS.
+
+---
+
+## 2. `unproven: 57` — the demo was measuring a different board
+
+Confirmed, measured and fixed. Seed 42, 120 payouts / 3,000 records, sweeping the
+uniqueness budget between the live 20 k and the offline 40 M:
+
+| budget | gen s | unproven | verified | ambiguous |
+|---|---|---|---|---|
+| 20,000 | 0.8 | **57** | 52 | 2 |
+| 50,000 | 1.1 | 44 | 65 | 2 |
+| 100,000 | 1.7 | 37 | 70 | 4 |
+| 250,000 | 2.9 | 26 | 80 | 5 |
+| 500,000 | 4.5 | 22 | 84 | 5 |
+| 1,000,000 | 7.4 | 20 | 86 | 5 |
+| 2,000,000 | 12.3 | 15 | 88 | 8 |
+| **5,000,000** | **18.7** | **6** | **92** | 13 |
+| 10,000,000 | 25.8 | 4 | 92 | 15 |
+| 20,000,000 | 35.2 | 3 | 92 | 16 |
+| 40,000,000 | 53.9 | 3 | 92 | 16 |
+
+**The knee is 5 M and the reason is sharper than "single digits".** `verified`
+reaches its ceiling of **92 — the same figure the 40 M offline run reports** — at
+5 M. Beyond that only three lines move, and they move *out of* `unproven` and *into*
+`AMBIGUOUS_SUBSET`; the headline population does not grow at all. So 5 M buys the
+entire scored headline for 18.7 s.
+
+`UNIQUENESS_NODE_BUDGET_DEMO = 5_000_000`, with the sweep table in the comment.
+Measured end to end through the API: **31 s** — 19 s generate, 11 s match, audit and
+scoring inside the rest. That overruns §15's 6 s generation line and fits its 60 s
+ceiling comfortably. The overrun is deliberate: a demo that generates in under a
+second and then measures a different board from the journals is the worse trade, and
+§10.1 is explicit that the budget is not a performance knob.
+
+**The board before and after, same code, same seed, same deadline:**
+
+| | 20 k | 5 M |
+|---|---|---|
+| headline n | 65 | **105** |
+| headline TP / FN | 52 / 0 | **92 / 0** |
+| `unproven` | 57 | **6** |
+| `emergent` (AMBIGUOUS_SUBSET) | 2 | **13** |
+| all-lines recall | 83.2% | **91.7%** |
+| end to end | 13 s | 31 s |
+
+Nine FN remain on the browser board: six `SPLIT_PAYOUT` halves waiting on C3
+(stage 13) and three still `unproven`.
+
+**Two side findings, recorded and not acted on.** 20 M is *indistinguishable* from
+40 M — 3 unproven, 92 verified, 16 ambiguous — at 35 s against 53.9 s, so the
+committed offline budget carries ~19 s of pure waste. And `verified` plateauing at 92
+means the 42 lines outside the headline are not budget-limited at all; no budget
+recovers them. Changing the offline budget would regenerate the committed board and
+move every pinned count in the suite, so it is a separate decision, not a drive-by.
+
+---
+
+## 3. The closed column was 90 % whitespace
+
+`FIRST_SCREEN` 8 → **20**, and **the first row's proof strip renders open on
+arrival**. §11.1 is that in production the proof strip is what a human verifies
+*instead of* precision — so it is the claim the board is making, and a claim behind a
+click is a claim nobody sees.
+
+---
+
+## 4. The double rule was there and invisible
+
+`<div class="double-under">` has rendered since the first commit. The global
+`* { box-sizing: border-box }` reset made `height: 3px` **include** both 1 px
+borders, leaving a 1 px gap — two rules 1 px apart render as one thick line, which
+loses the convention entirely. `box-sizing: content-box` on that one element, so the
+height is the gap.
+
+The check now asserts the element by name against §13.
+
+---
+
+## 5. `₹` on the total, bare line items
+
+`fmtBare` for the rows, `fmtInr` for the total. A ledger does not repeat the symbol
+on every line, and a bare total is not obviously money — the total is the answer, so
+it carries the mark. Asserted as *exactly one* `₹` in the arithmetic table, on the
+total row.
+
+---
+
+## 6. The delta has its own line
+
+It was sharing a flex row with the tie sentence and wrapping under the transaction
+count, where the figure a judge reads closest looked like a trailing note. It is now
+its own right-aligned line at 160 px — the same column as the total it refers to —
+in weight 500 and `white-space: nowrap`.
+
+---
+
+## 7. Derived rows carry an em dash
+
+MDR, GST and TDS have no count of their own; the blank cells read as missing data.
+An em dash in `--rule` says "not applicable here", which is what it is. Asserted:
+exactly one `count derived` cell in the fixture, and the payments row still shows
+`29`.
+
+---
+
+## The check earns its place
+
+`npm run check` grew from 11 assertions to 13 and now covers items 4 through 7:
+
+```
+ok    double rule below (div.double-under) — §13 ledger convention
+ok    ₹ appears exactly once in the arithmetic table, and on the total
+ok    derived rows carry an em dash, not a blank cell
+ok    the delta is on its own line, not sharing a row with the tie sentence
+```
+
+One assertion was written with a `|| true` in it while I was iterating and has been
+deleted rather than shipped. A green that cannot fail is worse than no green.

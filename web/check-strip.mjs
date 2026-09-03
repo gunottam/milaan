@@ -66,10 +66,21 @@ ok('and it is a real table row spanning the columns above it',
 ok('no modal, dialog, overlay or fixed positioning',
    !/role="dialog"|<dialog|position:\s*fixed|class="[^"]*(modal|overlay)/.test(open))
 ok('single rule above the total (tr.total)', open.includes('class="total"'))
-ok('double rule below (div.double-under)', open.includes('class="double-under"'))
+ok('double rule below (div.double-under) \u2014 \u00a713 ledger convention',
+   open.includes('class="double-under"'))
 ok('the tick is in the margin', open.includes('class="tick"') && open.includes('\u2713'))
 ok('figures use Indian grouping', open.includes('97,539.19') && open.includes('95,928.24'))
-ok('it ties, with the delta stated', /0 paise delta/.test(open))
+// \u20b9 on the total only. A ledger does not repeat the symbol on every row, but a
+// bare total is not obviously money, and the total is the answer.
+ok('\u20b9 appears exactly once in the arithmetic table, and on the total',
+   (open.match(/<td class="figure">\u20b9/g) || []).length === 1
+   && /<tr class="total">.*<td class="figure">\u20b995,928\.24<\/td>/.test(open))
+ok('derived rows carry an em dash, not a blank cell',
+   (open.match(/class="count derived">\u2014</g) || []).length === 1
+   && open.includes('class="count">29<'))
+ok('the delta is on its own line, not sharing a row with the tie sentence',
+   /<div class="delta">0 paise delta<\/div>/.test(open))
+ok('it ties, and says so', /class="tie-line"/.test(open) && /ties to the credit/.test(open))
 ok('the caret flips to \u25be when open', open.includes('\u25be')
    && open.includes('aria-expanded="true"'))
 

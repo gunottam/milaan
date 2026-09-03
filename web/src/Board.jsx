@@ -10,10 +10,12 @@
 import { Fragment, useState } from 'react'
 import { fmtInr, fmtBare, fmtDate } from './money'
 
-// A demo shows the first screenful and expands on demand. 99 ruled rows is a
-// scroll, not a ledger — the closed column's job is to make the arithmetic
-// reachable, and the count carries the completeness claim.
-const FIRST_SCREEN = 8
+// The closed column's job is to make the arithmetic reachable, and it was doing
+// the opposite: eight rows of whitespace beside an open column running three
+// screens, with the strongest object on the board — the proof — behind a click
+// nobody knew to make. Twenty rows fills the column, and the first strip renders
+// open so the arithmetic is on screen before anybody touches anything.
+const FIRST_SCREEN = 20
 
 // --- the proof strip -------------------------------------------------------
 
@@ -40,28 +42,38 @@ export function ProofStrip({ row }) {
               {/* The sign lives in the left margin and the figure is unsigned —
                   §13's sketch, and the reason the column reads as a column. */}
               <td className="sign">{r.amount_paise < 0 ? '−' : ''}</td>
-              <td className="count">{r.count || ''}</td>
+              {/* MDR, GST and TDS are derived from the transactions above them and
+                  have no count of their own. A blank cell reads as missing data;
+                  an em dash says "not applicable here", which is what it is. */}
+              <td className={`count${r.count ? '' : ' derived'}`}>
+                {r.count || '—'}
+              </td>
               <td className="desc">{r.label}</td>
+              {/* Line items are bare: a ledger does not repeat the symbol on every
+                  row. The total carries it, because the total is the answer. */}
               <td className="figure">{fmtBare(r.amount_paise)}</td>
             </tr>
           ))}
           {/* Single rule above the total. */}
           <tr className="total">
             <td /><td /><td />
-            <td className="figure">{fmtBare(proof.total_paise)}</td>
+            <td className="figure">{fmtInr(proof.total_paise)}</td>
           </tr>
         </tbody>
       </table>
       {/* Double rule below — the bookkeeping mark for a closed sum. */}
       <div className="double-under" />
 
+      {/* The delta gets its own line. It is the figure a reader checks hardest —
+          the whole claim is that the arithmetic closes — and it was wrapping under
+          the transaction count where it read as an afterthought. */}
       <div className={`ties${delta_paise ? ' off' : ''}`}>
-        <span>
+        <div className="tie-line">
           {delta_paise === 0 ? '✓' : '~'} ties to the credit of {fmtDate(value_date)}
           {row.anchor_settlement_id ? ` · ${row.anchor_settlement_id}` : ''}
           {` · ${row.composition_size} transactions tied`}
-        </span>
-        <span>{delta_paise} paise delta</span>
+        </div>
+        <div className="delta">{delta_paise} paise delta</div>
       </div>
 
       {/* §9.4: an accepted match spanning settlements is flagged for human
@@ -81,7 +93,10 @@ export function ProofStrip({ row }) {
 // --- CLOSED ----------------------------------------------------------------
 
 function Closed({ rows }) {
-  const [open, setOpen] = useState(null)
+  // The first row's strip is open on arrival. §11.1: in production the proof strip
+  // is what a human verifies *instead of* precision, so it is the claim the board
+  // is making — and a claim behind a click is a claim nobody sees.
+  const [open, setOpen] = useState(rows[0]?.bank_line_id ?? null)
   const [all, setAll] = useState(false)
   const shown = all ? rows : rows.slice(0, FIRST_SCREEN)
   return (

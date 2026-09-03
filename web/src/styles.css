@@ -162,6 +162,12 @@ button.run:disabled { background: var(--ink-soft); border-color: var(--ink-soft)
 
 .qualifier { color: var(--ink-soft); font-size: 12px; }
 
+/* The complete recall figure is set in ink at the same weight as the narrow one.
+ * Demoting it — smaller, softer, parenthesised — would be the same evasion as
+ * hiding it, done with typography instead of a control. */
+.recall-line { border-top: 1px solid var(--rule); padding-top: 8px; }
+.recall-line .complete { border-bottom: 2px solid var(--ink); padding-bottom: 1px; }
+
 /* The disclosed buckets, beside the headline rather than implied by it. */
 table.buckets { width: 100%; border-collapse: collapse; margin: 6px 0 10px;
                 font-size: 12px; }
@@ -301,6 +307,10 @@ tr.proof > td { padding: 0 8px 16px; background: var(--paper); }
 .strip tr.total td { border-top: 1px solid var(--ink); padding-top: 4px; }
 .strip tr.total td.figure { font-weight: 500; }
 .strip .double-under {
+  /* `content-box` on purpose. The global `border-box` reset made `height: 3px`
+   * include both 1px borders, leaving a 1px gap — which renders as one thick rule
+   * and loses the convention entirely. Here the height IS the gap. */
+  box-sizing: content-box;
   border-top: 1px solid var(--ink);
   border-bottom: 1px solid var(--ink);
   height: 3px;
@@ -308,11 +318,20 @@ tr.proof > td { padding: 0 8px 16px; background: var(--paper); }
   margin-left: auto;
 }
 
-.strip .ties {
-  display: flex; justify-content: space-between; align-items: baseline;
-  padding-top: 9px; color: var(--tally);
+/* The delta on its own line, right-aligned under the total it refers to. It was
+ * sharing a flex row with the tie sentence and wrapping beneath the transaction
+ * count, where the number a judge reads closest looked like a trailing note. */
+.strip .ties { padding-top: 9px; color: var(--tally); }
+.strip .ties .tie-line { line-height: 1.5; }
+.strip .ties .delta {
+  text-align: right; width: 160px; margin-left: auto;
+  padding-top: 3px; font-weight: 500; white-space: nowrap;
 }
 .strip .ties.off { color: var(--break); }
+
+/* A derived row has no count of its own — an em dash, softened so it reads as
+ * "not applicable" rather than as a value. */
+.strip td.count.derived { color: var(--rule); }
 
 /* §9.4's audit flag on a closed line. Ruled off from the proof above it, in the
  * break colour, because it is a thing to confirm and not a thing that failed. */

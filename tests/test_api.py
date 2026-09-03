@@ -20,6 +20,8 @@ from fastapi.testclient import TestClient
 
 from api.main import (PHASES, RunRequest, app, build_report, line_detail,
                       run_notes)
+from generator.config import (UNIQUENESS_NODE_BUDGET_DEMO,
+                              UNIQUENESS_NODE_BUDGET_OFFLINE)
 from scoring.score import BUCKETS
 
 SEED42 = Path("data/runs/seed42")
@@ -209,14 +211,34 @@ def test_use_llm_is_honoured_by_being_refused():
     accepted, ignored, and disclosed on the board itself."""
     quiet = run_notes(RunRequest(use_llm=False))
     loud = run_notes(RunRequest(use_llm=True))
-    assert any("live budget" in note for note in quiet)
     assert not any("stage 12" in note for note in quiet)
     assert any("stage 12" in note and "deterministic" in note for note in loud)
 
 
-def test_the_live_budget_is_disclosed_on_every_run():
+def test_the_generation_budget_is_named_on_every_run():
     """§10.1: the node budget is not a performance knob, it is what decides whether
-    the uniqueness guarantee holds. A run generated at the live budget and compared
-    against a committed offline board is comparing two denominators."""
-    assert any("bucket sizes do not compare" in note
-               for note in run_notes(RunRequest()))
+    the uniqueness guarantee holds — so a board must say which one produced it.
+
+    Asserted on the substance rather than the phrasing: the demo budget's own figure
+    appears, and so does the offline figure it is being compared against. Stage 11b
+    moved the demo budget from 20k to 5M precisely because the old one put 57 of 134
+    lines in `unproven` and measured a different board from the journals.
+    """
+    note = run_notes(RunRequest())[0]
+    assert f"{UNIQUENESS_NODE_BUDGET_DEMO:,}" in note
+    assert f"{UNIQUENESS_NODE_BUDGET_OFFLINE:,}" in note
+    assert "unproven" in note
+
+
+def test_the_demo_budget_reaches_the_offline_verified_population():
+    """The measured claim behind stage 11b's choice of 5M, pinned so a future edit
+    to the constant has to argue with it.
+
+    The sweep in `generator/config.py` shows `verified` reaching 92 at 5M and staying
+    there through 40M. A budget below the knee is not a slower demo, it is a
+    different measurement.
+    """
+    assert UNIQUENESS_NODE_BUDGET_DEMO < UNIQUENESS_NODE_BUDGET_OFFLINE
+    assert UNIQUENESS_NODE_BUDGET_DEMO >= 5_000_000, (
+        "below the measured knee the headline population shrinks; see the sweep "
+        "table in generator/config.py")

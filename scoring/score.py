@@ -93,6 +93,17 @@ class Report:
         return sorted(b for b in self.outcomes if self.buckets[b] in set(buckets))
 
 
+def all_lines(report: "Report") -> Counter:
+    """Every scored bank line, in one Counter. §11's denominator without the bucket.
+
+    `Report.counts()` with no arguments already means this — the empty-args default
+    is every bucket but `excluded` — but "the complete figure" is worth a name. It
+    is the number a reader checks the board against, and a default argument is not
+    something anybody reads.
+    """
+    return report.counts()
+
+
 def precision(c: Counter) -> float | None:
     return c["TP"] / (c["TP"] + c["FP"]) if c["TP"] + c["FP"] else None
 
@@ -357,20 +368,25 @@ def render(report: Report, truth: Mapping, ladder: Run,
 
     head = report.counts("headline")
     n = sum(head.values())
-    held = sum(sum(report.counts(b).values()) for b in DISCLOSED)
-    # **The denominator, in the label.** `recall 100.0%` beside `35 open` reads as a
-    # contradiction and is not one: the headline bucket is verified-unique lines plus
-    # refusals on lines nobody rigged, and at the live 20k budget 57 of 134 lines
-    # land in `unproven` instead. The figure was never wrong; it was silently narrow.
-    # An unlabelled percentage over a bucket the reader cannot see is the kind of
-    # number this project exists to refuse.
+    every = all_lines(report)
+    held_fn = every["FN"] - head["FN"]
+    # **The complete figure sits beside the narrow one, not behind a control.**
+    # `recall 100.0%` next to `35 open` and a banner naming lines that score FN is a
+    # contradiction from the reader's side, and the resolution — that the headline
+    # bucket is 65 of 134 lines — cannot be something they have to go looking for.
+    # The unflattering number is the unarguable one, so it is printed on the same
+    # line as the flattering one and never on its own.
     out += [f"HEADLINE — {BUCKETS['headline']}", _rule(),
             f"  TP {head['TP']:>4}      FP {head['FP']:>4}      "
             f"FN {head['FN']:>4}      TN {head['TN']:>4}",
             f"  precision {_pct(precision(head))} (verified-unique, n={n})"
             f"        recall {_pct(recall(head))} (verified-unique, n={n})",
-            f"  {held} of {n + held} scored lines are held out of this figure and "
-            f"broken out below.",
+            f"  ALL LINES  TP {every['TP']:>4}  FP {every['FP']:>4}  "
+            f"FN {every['FN']:>4}  TN {every['TN']:>4}   "
+            f"precision {_pct(precision(every))}   recall {_pct(recall(every))}"
+            f"  (n={sum(every.values())})",
+            f"  {held_fn} of those FN are in the disclosed buckets below, held out "
+            f"of the headline figure.",
             ""]
 
     out += ["DISCLOSED — held out of the headline, reported by name", _rule()]
