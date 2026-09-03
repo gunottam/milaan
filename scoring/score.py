@@ -289,7 +289,10 @@ def phase_e(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                     for bid, (_, claim, _) in ladder.matched.items()}
     claimed = [e for composition in compositions.values() for e in composition]
     residue = residue_gap(txns, bank_lines, compositions, claimed,
-                          partial=ladder.deadline_hit)
+                          partial=ladder.deadline_hit,
+                          # §9.10's two populations. Their exposure is §8.2's cap
+                          # per line, not their targets — `audit.py` derives why.
+                          cut_lines=(*ladder.cut, *ladder.exceeded))
     splits = coherence_audit(compositions, {t.entity_id: t for t in txns})
     ledger = exception_ledger.build(
         txns, bank_lines, orders, matched=compositions, trace=ladder.trace,
@@ -353,11 +356,21 @@ def render(report: Report, truth: Mapping, ladder: Run,
            *residue.lines(), *_reconciliation(residue, ledger), ""]
 
     head = report.counts("headline")
+    n = sum(head.values())
+    held = sum(sum(report.counts(b).values()) for b in DISCLOSED)
+    # **The denominator, in the label.** `recall 100.0%` beside `35 open` reads as a
+    # contradiction and is not one: the headline bucket is verified-unique lines plus
+    # refusals on lines nobody rigged, and at the live 20k budget 57 of 134 lines
+    # land in `unproven` instead. The figure was never wrong; it was silently narrow.
+    # An unlabelled percentage over a bucket the reader cannot see is the kind of
+    # number this project exists to refuse.
     out += [f"HEADLINE — {BUCKETS['headline']}", _rule(),
             f"  TP {head['TP']:>4}      FP {head['FP']:>4}      "
             f"FN {head['FN']:>4}      TN {head['TN']:>4}",
-            f"  precision {_pct(precision(head))}        "
-            f"recall {_pct(recall(head))}",
+            f"  precision {_pct(precision(head))} (verified-unique, n={n})"
+            f"        recall {_pct(recall(head))} (verified-unique, n={n})",
+            f"  {held} of {n + held} scored lines are held out of this figure and "
+            f"broken out below.",
             ""]
 
     out += ["DISCLOSED — held out of the headline, reported by name", _rule()]

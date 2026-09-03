@@ -45,6 +45,36 @@ AGE_BUCKETS = ((2, "0-2d"), (7, "3-7d"), (30, "8-30d"), (None, ">30d"))
 FIRST = ("WITHHELD_RECORD", "AMBIGUOUS_CONSEQUENTIAL")
 LAST = ("AMBIGUOUS_EQUIVALENT",)
 
+# Is the amount on this row money the books cannot account for, or a figure that
+# needs a note in a file? **Summing the two together produces a number that is
+# always wrong and always alarming**, and the ledger was doing exactly that: on
+# seed 42 the three `DUPLICATE_CREDIT` pairs contributed ₹5,13,970.88 of "at risk"
+# for six lines that net to zero by construction.
+#
+# `documentation` is not a softer word for the same thing. Each of the three has a
+# specific reason the money is not at risk:
+#
+#   DUPLICATE_CREDIT         the pair is a posting and its T+1 contra (§3.2). The
+#                            two rows cancel exactly; the bank owes nothing and
+#                            nothing is missing. It needs a contra entry, not an
+#                            investigation.
+#   AMBIGUOUS_EQUIVALENT     §10.1: the alternatives have identical fee, GST, TDS,
+#                            dates and entity types, so *either* assignment gives
+#                            identical books. The money is accounted for whichever
+#                            way it is booked. A 30-second human task.
+#   SETTLEMENT_CONTAMINATION the line is **closed** with a delta of zero (§9.4) —
+#                            G3 accepted the shape, G2 balanced it. The flag asks a
+#                            human to confirm a tagging, and the amount is what a
+#                            repair would move, not what is unaccounted for.
+#
+# Everything else is genuinely unaccounted for and defaults to `at_risk`, so a new
+# type is treated as money until someone argues otherwise.
+DOCUMENTATION = ("DUPLICATE_CREDIT", "AMBIGUOUS_EQUIVALENT", "SETTLEMENT_CONTAMINATION")
+
+
+def risk_class(exception_type: str) -> str:
+    return "documentation" if exception_type in DOCUMENTATION else "at_risk"
+
 
 def reversal_pairs(bank_lines: Sequence[BankLine],
                    open_lines: Iterable[str]) -> dict[str, str]:
@@ -107,6 +137,14 @@ class LedgerException:
     hypotheses_tried: int
     evidence: tuple[str, ...] = ()
     settlement_id: str | None = None
+    # `at_risk` or `documentation` — see `DOCUMENTATION`. Stamped on the record
+    # rather than derived by each reader, so the CLI board, the API and the
+    # scoreboard cannot disagree about which column a row belongs in.
+    risk_class: str = "at_risk"
+    # For a `DUPLICATE_CREDIT`, the bank line that reverses this one (§3.2). The
+    # pair is the unit of meaning: one row on its own reads as an unexplained
+    # credit, and the whole finding is that there are two.
+    reverses: str | None = None
     # The gap this line could size on its own, signed, or `None` when it could
     # not. Only an anchored line can size one: without a settlement id there is
     # nothing to subtract the credit from, and §9.7's global sum is then the only
@@ -129,6 +167,8 @@ class LedgerException:
             "hypotheses_tried": self.hypotheses_tried,
             "settlement_id": self.settlement_id,
             "residual_paise": self.residual_paise,
+            "risk_class": self.risk_class,
+            "reverses": self.reverses,
         }
 
 
@@ -157,6 +197,7 @@ class _Draft:
     settlement_id: str | None = None
     machine_dependent: bool = False
     residual_paise: Paise | None = None
+    reverses: str | None = None
 
 
 def _confidence(draft: _Draft) -> str:
@@ -201,7 +242,41 @@ class Ledger:
 
     @property
     def at_risk_paise(self) -> Paise:
-        return sum(e.amount_at_risk_paise for e in self.exceptions)
+        """Money the books cannot account for. **Only the `at_risk` rows.**
+
+        The documentation rows are excluded, not discounted — see `DOCUMENTATION`
+        for why each of the three is not money at risk. Adding them in produced a
+        headline that was always too big and never actionable.
+        """
+        return sum(e.amount_at_risk_paise for e in self.exceptions
+                   if e.risk_class == "at_risk")
+
+    @property
+    def documentation_paise(self) -> Paise:
+        """Face value of the rows that need a note rather than an investigation.
+
+        Reported beside `at_risk_paise` and never added to it. For the reversal
+        pairs this figure is double the money involved — both halves of a contra are
+        open bank lines and both are listed — which is precisely why it is not a
+        risk number. `nets_to_zero_paise` says how much of it cancels.
+        """
+        return sum(e.amount_at_risk_paise for e in self.exceptions
+                   if e.risk_class == "documentation")
+
+    @property
+    def nets_to_zero_paise(self) -> Paise:
+        """The part of `documentation_paise` that is a posting and its contra.
+
+        One side of each `DUPLICATE_CREDIT` pair, which is the money that appeared
+        on the statement and then left it again (§3.2).
+        """
+        seen: set[str] = set()
+        total = 0
+        for exc in self.exceptions:
+            if exc.reverses and exc.bank_line_id not in seen:
+                seen.update({exc.bank_line_id, exc.reverses})
+                total += exc.amount_at_risk_paise
+        return total
 
     def by_type(self) -> dict[str, list[LedgerException]]:
         out: dict[str, list[LedgerException]] = {}
@@ -228,6 +303,8 @@ class Ledger:
     def as_dict(self) -> dict:
         return {"as_of": self.as_of.isoformat(),
                 "at_risk_paise": self.at_risk_paise,
+                "documentation_paise": self.documentation_paise,
+                "nets_to_zero_paise": self.nets_to_zero_paise,
                 "malformed_hypotheses": self.malformed_hypotheses,
                 "exceptions": [e.as_dict() for e in self.exceptions],
                 "coherence_flags": [s.sentence for s in self.splits]}
@@ -287,7 +364,7 @@ def _type_open_line(line: BankLine, steps: Sequence[Mapping], deadline_cut: bool
                              "detail": f"Contra {line.bank_line_id} against "
                                        f"{reverses}; no gateway record is expected "
                                        "for either."},
-            hypotheses_tried=tried, tokens=3)
+            hypotheses_tried=tried, tokens=3, reverses=reverses)
         draft.evidence.append(
             f"{fmt_inr(target(line))} on this line is reversed exactly by "
             f"{reverses} on an adjacent calendar day (§3.2)")
@@ -532,7 +609,8 @@ def build(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                 proposed_action=d.proposed_action,
                 hypotheses_tried=d.hypotheses_tried,
                 evidence=tuple(d.evidence), settlement_id=d.settlement_id,
-                residual_paise=d.residual_paise)
+                residual_paise=d.residual_paise, reverses=d.reverses,
+                risk_class=risk_class(d.exception_type))
             for i, d in enumerate(drafts, start=1)),
         as_of=as_of,
         # §10.1's internal counter: a claim citing a non-existent or already-spent
@@ -547,15 +625,27 @@ def build(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
 
 def render(ledger: Ledger, limit: int = 12) -> list[str]:
     """§13's OPEN ITEMS column, as text. Typed, priced, aged, one sentence each."""
-    out = [f"EXCEPTION LEDGER — {len(ledger.exceptions)} open, "
-           f"{fmt_inr(ledger.at_risk_paise)} at risk, aged from "
+    at_risk = [e for e in ledger.exceptions if e.risk_class == "at_risk"]
+    docs = [e for e in ledger.exceptions if e.risk_class == "documentation"]
+    out = [f"EXCEPTION LEDGER — {len(ledger.exceptions)} open, aged from "
            f"{ledger.as_of.isoformat()}",
-           "─" * 92]
+           "─" * 92,
+           f"  AT RISK              {len(at_risk):>4} items   "
+           f"{fmt_inr(ledger.at_risk_paise):>16}   the books cannot account for this",
+           f"  NEEDS DOCUMENTATION  {len(docs):>4} items   "
+           f"{fmt_inr(ledger.documentation_paise):>16}   reconciled or "
+           f"bookkeeping-identical"]
+    if ledger.nets_to_zero_paise:
+        out.append(f"  {'':<21}{'':>4}          "
+                   f"{fmt_inr(ledger.nets_to_zero_paise):>16}   of it is a posting "
+                   f"and its contra, netting to zero (§3.2)")
+    out.append("")
     counts = ledger.by_type()
     for kind in sorted(counts, key=lambda k: -ledger.total_for(k)):
         rows = counts[kind]
         out.append(f"  {kind:<28}{len(rows):>4}   "
-                   f"{fmt_inr(ledger.total_for(kind)):>16}")
+                   f"{fmt_inr(ledger.total_for(kind)):>16}   "
+                   f"{risk_class(kind)}")
     out.append("")
     for exc in ledger.exceptions[:limit]:
         out.append(f"  {exc.exception_id}  {exc.bank_line_id or '—':<10}"

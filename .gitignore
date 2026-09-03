@@ -5,3 +5,5 @@ __pycache__/
 data/runs/
 node_modules/
 web/dist/
+web/check-strip.bundle.*
+web/check-strip.entry.*

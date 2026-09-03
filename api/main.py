@@ -37,7 +37,7 @@ from generator.config import (SETTLEMENT_WINDOW_DAYS,
                               UNIQUENESS_NODE_BUDGET_LIVE)
 from generator.generate import emit, generate
 from matcher.run import MATCH_DEADLINE_MS, run_ladder
-from scoring.score import phase_e, precision, recall, score
+from scoring.score import BUCKETS, DISCLOSED, phase_e, precision, recall, score
 
 RUNS = Path("data/runs")
 
@@ -187,6 +187,18 @@ def build_report(run_dir: Path, deadline_ms: int | None = MATCH_DEADLINE_MS,
         "transactions_tied": residue.census["claimed"],
         "counts": dict(counts),
         "precision": precision(counts), "recall": recall(counts),
+        # **The headline's denominator, shipped with the headline.** `recall` is
+        # over the verified-unique bucket only, and at the live budget that is 65 of
+        # 134 lines — so an unlabelled 100% beside "35 open" reads as a
+        # contradiction. `headline_n` is what the UI must print next to the figure,
+        # and `buckets` is what it must render beside it: every line held out of the
+        # headline, by name, with its own outcome counts.
+        "headline_n": sum(counts.values()),
+        "buckets": [{"name": name, "blurb": BUCKETS[name],
+                     "counts": dict(report.counts(name)),
+                     "n": sum(report.counts(name).values()),
+                     "in_headline": name == "headline"}
+                    for name in ("headline", *DISCLOSED)],
         "exact": sum(1 for c in closed if c["confidence"] == "exact"),
         "tolerance": sum(1 for c in closed if c["confidence"] == "tolerance"),
         "via_hypothesis": sum(1 for c in closed if c["source"] == "hypothesis"),
@@ -199,6 +211,17 @@ def build_report(run_dir: Path, deadline_ms: int | None = MATCH_DEADLINE_MS,
             "unclaimed_due_paise": residue.unclaimed_due_paise,
             "census": dict(residue.census), "sums": dict(residue.sums),
             "reconciles": residue.reconciles, "partial": residue.partial,
+            # The composition of the gap, so the header's indicator can be taken
+            # apart rather than merely marked. `baseline` is the gap before any
+            # line matched; `matcher_delta` is everything the ladder added to it,
+            # which by the identity in `audit.py` is the sum of its tolerance
+            # deltas; `deadline_slack` is the most the unfinished lines could still
+            # account for. An indicator nobody can decompose gets ignored.
+            "baseline_gap_paise": residue.baseline_gap_paise,
+            "matcher_delta_paise": residue.matcher_delta_paise,
+            "deadline_slack_paise": residue.deadline_slack_paise,
+            "cut_lines": list(residue.cut_lines),
+            "composition": residue.composition(),
         },
         "ledger": ledger.as_dict(),
         "closed_lines": closed,

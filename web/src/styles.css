@@ -136,9 +136,65 @@ button.run:disabled { background: var(--ink-soft); border-color: var(--ink-soft)
   display: flex; align-items: baseline; gap: 9px;
   padding: 4px 11px;
   border: 1px solid var(--rule);
+  border-radius: 0;
+  background: none;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+/* The composition of the gap, straight from `audit.py`. Preformatted because the
+ * figures are already aligned there and re-laying them out in CSS would be a
+ * second opinion about a number that must have one. */
+.gap-composition {
+  width: 100%;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  background: var(--bar);
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-x: auto;
 }
+
+.qualifier { color: var(--ink-soft); font-size: 12px; }
+
+/* The disclosed buckets, beside the headline rather than implied by it. */
+table.buckets { width: 100%; border-collapse: collapse; margin: 6px 0 10px;
+                font-size: 12px; }
+table.buckets td { padding: 4px 10px 4px 0; border-bottom: 1px solid var(--rule);
+                   vertical-align: baseline; }
+table.buckets td.bname { font-family: var(--mono); white-space: nowrap; }
+table.buckets td.num { font-family: var(--mono); font-variant-numeric: tabular-nums;
+                       text-align: right; width: 40px; }
+table.buckets td.bcounts { font-family: var(--mono); font-variant-numeric: tabular-nums;
+                           white-space: nowrap; width: 170px; }
+table.buckets td.blurb { color: var(--ink-soft); }
+table.buckets tr.in-headline td { border-bottom: 1px solid var(--ink); }
+table.buckets tr.in-headline td.bname { font-weight: 500; }
+table.buckets tr.bucket-total td { border-bottom: none; color: var(--ink-soft); }
+
+/* --- the risk split ------------------------------------------------------ */
+
+.risk-split { display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+              border-bottom: 1px solid var(--rule); }
+.risk { padding: 10px 14px 12px 0; display: flex; flex-direction: column; gap: 3px; }
+.risk.docs { padding-left: 14px; border-left: 1px solid var(--rule); }
+.risk .amount { font-family: var(--mono); font-variant-numeric: tabular-nums;
+                font-size: 17px; }
+.risk .note { color: var(--ink-soft); font-size: 11px; line-height: 1.45; }
+.risk.docs .amount { color: var(--ink-soft); }
+
+.sub-head { padding: 14px 0 5px; border-bottom: 1px solid var(--rule); }
+
+.cut-note {
+  font-size: 12px; color: var(--ink-soft); line-height: 1.5;
+  padding: 10px 0; margin: 0; border-bottom: 1px solid var(--rule);
+}
+.cut-note b { font-family: var(--mono); font-weight: 400; color: var(--break); }
 .gap.reconciles { border-color: var(--tally); color: var(--tally); }
 .gap.broken     { border-color: var(--break); color: var(--break); }
 .gap.unknown    { border-color: var(--ink-soft); color: var(--ink-soft); }
@@ -175,9 +231,34 @@ table.ledger { width: 100%; border-collapse: collapse; }
 
 table.ledger tbody tr.row { border-bottom: 1px solid var(--rule); cursor: pointer; }
 /* Greenbar: continuous-feed paper alternates a pale green band every other row so
- * the eye tracks across a wide line. `--bar` is that band. */
-table.ledger tbody tr.row:nth-of-type(4n + 3) { background: var(--bar); }
+ * the eye tracks across a wide line. `--bar` is that band.
+ *
+ * The class comes from the row's index in the data, not from `nth-of-type`. An
+ * expanded proof row is a `<tr>` too, so a CSS parity selector re-bands every row
+ * beneath an open strip — the banding would visibly jump each time somebody
+ * clicked, which on a ledger reads as the numbers having moved. */
+table.ledger tbody tr.row.tint { background: var(--bar); }
 table.ledger tbody tr.row:hover { background: var(--rule); }
+table.ledger tbody tr.row:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+table.ledger tbody tr.row.expanded { background: var(--rule); }
+
+/* The affordance. A clickable row that does not look clickable hides the proof
+ * strip, which is the one thing on this screen worth finding. */
+table.ledger td.caret { width: 16px; color: var(--ink-soft); font-family: var(--mono);
+                        font-size: 11px; }
+
+button.more {
+  font-family: var(--sans); font-size: 11px; font-weight: 500;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-soft); background: none; border: none; border-bottom: 1px solid var(--rule);
+  padding: 9px 0; margin-top: 4px; width: 100%; text-align: left; cursor: pointer;
+}
+button.more:hover { color: var(--ink); border-bottom-color: var(--ink); }
+button.more.inline { width: auto; border-bottom: none; padding: 0; margin: 0;
+                     text-decoration: underline; text-underline-offset: 3px; }
+
+.partner { color: var(--ink-soft); }
+.flag-mark { color: var(--break); font-family: var(--mono); }
 
 table.ledger td { padding: 5px 8px; vertical-align: baseline; }
 table.ledger td.num { text-align: right; }

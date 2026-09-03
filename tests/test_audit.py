@@ -26,6 +26,7 @@ from core.models import BankLine, GatewayTxn, Order, read_csv
 from generator.breaks import BREAK_COUNTS
 from generator.generate import generate
 from matcher import ledger as exception_ledger
+from core.subsetsum import TOLERANCE_PAISE
 from matcher.audit import coherence_audit, no_payout_settlements, residue_gap
 from matcher.diagnose import UNDIAGNOSED, diagnose
 from matcher.run import run_ladder
@@ -149,18 +150,65 @@ def test_phase_e_runs_on_partial_results(isolated):
     """§9.10, and the thing stage 9 deferred because `audit.py` did not exist.
 
     A one-millisecond deadline stops the ladder almost immediately. Phase E must
-    still produce a full four-way partition rather than raising or being skipped —
-    and it must decline to call the gap a discrepancy, because most of it is lines
-    nobody looked at. `reconciles` is `None`, not `False`.
+    still produce a full four-way partition rather than raising or being skipped.
     """
     data, _, _ = isolated
     ladder = run_ladder(list(data.txns), list(data.bank_lines), 2, deadline_ms=1)
     assert ladder.deadline_hit
     residue = residue_gap(list(data.txns), list(data.bank_lines), {}, [],
-                          partial=True)
+                          partial=True, cut_lines=[b.bank_line_id
+                                                   for b in data.bank_lines])
     assert sum(residue.census.values()) == len(data.txns)
-    assert residue.reconciles is None
-    assert any("deadline" in line for line in residue.lines())
+    assert any("open bank lines" in line for line in residue.lines())
+
+
+def test_closing_a_line_moves_the_gap_by_that_line_s_delta_and_nothing_else(isolated):
+    """The identity stage 11 found, and the reason a deadline-cut run is not
+    indeterminate.
+
+    Closing `L` removes `target(L)` from the open sum and `Σ net(C)` from the
+    unclaimed sum, so the gap moves by exactly `Σ net(C) − target(L)` — the line's
+    own delta. An exact match therefore moves it by **zero**, which means the figure
+    is already final before the first tier runs and an unfinished line can only
+    change it by whatever G4 would have absorbed.
+
+    Stage 10 marked any deadline-cut run `reconciles = None` on the opposite
+    assumption. That threw away a bound we can compute.
+    """
+    data, _, _ = isolated
+    txns, bank_lines = list(data.txns), list(data.bank_lines)
+    untouched = residue_gap(txns, bank_lines, {}, [])
+
+    for deadline in (None, 2_000):
+        ladder = run_ladder(txns, bank_lines, 2, deadline_ms=deadline)
+        compositions = {b: c.composition for b, (_, c, _) in ladder.matched.items()}
+        claimed = [e for c in compositions.values() for e in c]
+        after = residue_gap(txns, bank_lines, compositions, claimed)
+        deltas = sum(v.delta_paise for _, _, v in ladder.matched.values())
+        assert after.gap_paise == untouched.gap_paise + deltas
+        assert after.matcher_delta_paise == deltas
+        assert after.baseline_gap_paise == untouched.gap_paise
+
+
+def test_the_deadline_band_is_a_rupee_a_line_not_the_lines_targets(isolated):
+    """§8.2 caps what one match may absorb at ₹1.00, so five cut lines put ₹5.00 of
+    uncertainty on the gap — not the ₹1.75 lakh their targets total.
+
+    `reconciles` is `None` only when that band actually swallows the gap.
+    """
+    data, _, _ = isolated
+    txns, bank_lines = list(data.txns), list(data.bank_lines)
+    cut = [b.bank_line_id for b in bank_lines[:3]]
+    residue = residue_gap(txns, bank_lines, {}, [], partial=True, cut_lines=cut)
+    assert residue.deadline_slack_paise == 3 * TOLERANCE_PAISE
+    assert abs(residue.gap_paise) > residue.deadline_slack_paise
+    assert residue.reconciles is False, "a gap past the band is a hole, clock or not"
+
+    # A gap the band could account for is the one case that stays indeterminate.
+    tiny = residue_gap([_txn("pay_1", "payment", 10_000)],
+                       [_line("bl_1", credit=10_050)], {}, [],
+                       partial=True, cut_lines=["bl_1"])
+    assert tiny.gap_paise == 50 and tiny.reconciles is None
 
 
 # --- E2, the coherence audit -------------------------------------------------
@@ -375,3 +423,49 @@ def test_the_ledger_is_reproducible_across_two_builds(board):
                                    trace=ladder.trace, exceeded=ladder.exceeded,
                                    splits=splits)
     assert exception_ledger.render(again) == exception_ledger.render(ledger)
+
+
+# --- the risk split, §13's OPEN ITEMS column ---------------------------------
+
+
+def test_a_reversal_pair_is_documentation_not_money_at_risk():
+    """Stage 10 typed the pairs correctly and then priced them as risk.
+
+    Both halves of a contra are open bank lines, so both are listed, and summing
+    their face amounts counted ₹1,25,737.50 twice for a pair that nets to zero by
+    construction (§3.2). On seed 42 that put ₹5,13,970.88 of phantom exposure in a
+    headline meant to say what the books cannot account for.
+    """
+    txns = [_txn("pay_1", "payment", 10_000)]
+    lines = [_line("bl_1", credit=50_000, date="2026-01-04"),
+             _line("bl_2", debit=50_000, date="2026-01-05")]
+    ledger = exception_ledger.build(txns, lines, [], matched={}, trace=[])
+    rows = ledger.by_type()["DUPLICATE_CREDIT"]
+
+    assert {r.risk_class for r in rows} == {"documentation"}
+    assert ledger.at_risk_paise == 0, "a posting and its contra is not exposure"
+    assert ledger.documentation_paise == 100_000, "both open lines are still listed"
+    assert ledger.nets_to_zero_paise == 50_000, "and half of that cancels"
+    # Each row names its partner: one half alone reads as an unexplained credit.
+    assert {r.bank_line_id: r.reverses for r in rows} == {"bl_1": "bl_2", "bl_2": "bl_1"}
+
+
+def test_the_risk_split_covers_every_type_and_defaults_to_at_risk(board):
+    """A new exception type is money until somebody argues otherwise. Only the
+    three with a stated reason are documentation."""
+    ledger, _ = board
+    for exc in ledger.exceptions:
+        assert exc.risk_class == exception_ledger.risk_class(exc.exception_type)
+    docs = {e.exception_type for e in ledger.exceptions
+            if e.risk_class == "documentation"}
+    assert docs <= set(exception_ledger.DOCUMENTATION)
+    assert ledger.at_risk_paise + ledger.documentation_paise == sum(
+        e.amount_at_risk_paise for e in ledger.exceptions)
+
+
+def test_a_contaminated_line_is_documentation_because_it_balanced(board):
+    """§9.4: the line is closed with a zero delta. The flag asks a human to confirm
+    a tagging; the amount is what a repair would move, not what is unaccounted for."""
+    ledger, _ = board
+    rows = ledger.by_type().get("SETTLEMENT_CONTAMINATION", [])
+    assert rows and all(r.risk_class == "documentation" for r in rows)

@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 
 from api.main import (PHASES, RunRequest, app, build_report, line_detail,
                       run_notes)
+from scoring.score import BUCKETS
 
 SEED42 = Path("data/runs/seed42")
 
@@ -46,6 +47,53 @@ def test_the_report_carries_both_nouns_and_they_differ(report):
     assert report["transactions"] == 3009
     assert report["transactions_tied"] == report["residue"]["census"]["claimed"]
     assert report["transactions_tied"] > report["bank_lines"]
+
+
+def test_the_headline_ships_with_its_denominator(report):
+    """Issue 1. `recall 100.0%` beside `35 open` is not a contradiction and not a
+    bug — the headline bucket is verified-unique lines plus refusals on lines nobody
+    rigged, and at the live budget most lines land in `unproven` instead. But an
+    unlabelled percentage over an invisible denominator is exactly the kind of
+    number this project refuses, so `headline_n` and every held-out bucket ship
+    with it and the UI prints both.
+    """
+    assert report["headline_n"] == sum(report["counts"].values())
+    names = [b["name"] for b in report["buckets"]]
+    assert names[0] == "headline"
+    assert set(names) == set(BUCKETS) - {"excluded"}
+    total = sum(b["n"] for b in report["buckets"])
+    assert total == report["bank_lines"]
+    assert report["headline_n"] < total, (
+        "if the headline ever covers the whole board this test is vacuous")
+    held = [b for b in report["buckets"] if not b["in_headline"]]
+    assert any(b["counts"].get("FN") for b in held), (
+        "the FN the headline does not see must be visible in a named bucket")
+
+
+def test_the_gap_ships_its_composition(report):
+    """Issue 2. The `?`/`!` mark alone is an indicator nobody can take apart, and
+    one of those gets ignored. Every figure behind the gap travels with it."""
+    r = report["residue"]
+    assert r["gap_paise"] == r["open_lines_paise"] - r["unclaimed_due_paise"]
+    assert r["matcher_delta_paise"] == r["gap_paise"] - r["baseline_gap_paise"]
+    assert r["composition"] and all(isinstance(x, str) for x in r["composition"])
+    assert any("before any line matched" in x for x in r["composition"])
+
+
+def test_the_open_column_can_split_risk_from_documentation(report):
+    """Issue 3 and 4 share a root: `reversal_pairs` does run in the API path and
+    types all six lines correctly, but pricing both halves of a contra as exposure
+    made AT RISK a number that was always too big."""
+    led = report["ledger"]
+    assert led["at_risk_paise"] + led["documentation_paise"] == sum(
+        e["amount_at_risk_paise"] for e in led["exceptions"])
+    dup = [e for e in led["exceptions"] if e["exception_type"] == "DUPLICATE_CREDIT"]
+    assert dup, "seed 42 injects DUPLICATE_CREDIT; the reversal rule must be live"
+    assert all(e["risk_class"] == "documentation" and e["reverses"] for e in dup)
+    # Every pair is mutual — a row whose partner does not point back is a half-pair.
+    partners = {e["bank_line_id"]: e["reverses"] for e in dup}
+    assert all(partners[v] == k for k, v in partners.items())
+    assert led["nets_to_zero_paise"] * 2 == sum(e["amount_at_risk_paise"] for e in dup)
 
 
 def test_the_residue_gap_reaches_the_header(report):

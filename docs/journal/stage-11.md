@@ -5,7 +5,7 @@ Written for someone who knows `docs/spec.md` and has not read the code.
 Spec sections read: **§12** (API), **§13** (UI). Plus the experiment stage 10 recorded
 and declined to run.
 
-`pytest -q`: **212 passed, 0 skipped**, in 7 m 30 s. Twelve are new in `tests/test_api.py`,
+`pytest -q`: **220 passed, 0 skipped** (212 at first commit; stage 11a below adds 8). Twelve are new in `tests/test_api.py`,
 two in `tests/test_gates.py`, and seven pinned counts moved and were re-pinned to measured
 values.
 
@@ -311,3 +311,195 @@ still passes. `Verdict(ok=True)` appears nowhere outside `matcher/verify.py` (I2
 `Σ net_contribution(composition)` by construction, and a test pins it.
 
 `pytest tests/test_invariants.py`: green.
+
+---
+
+# Stage 11a — four issues from the board
+
+Raised against the rendered screen, in priority order. All four were real; two of
+them were findings about the *design*, not the pixels.
+
+`pytest -q`: **220 passed.** Plus `cd web && npm run check` — a new structural check
+on the proof strip, described at the end.
+
+---
+
+## 1. `recall 100.0%` beside `35 open` — the denominator was silently narrow
+
+**The number was right and the label was not.** `recall` is computed over the
+**headline bucket only** — §11's verified-unique lines plus refusals on lines nobody
+rigged. Everything else is disclosed separately and has been since stage 7. At the
+live 20 k budget the split is:
+
+| bucket | n | outcomes |
+|---|---|---|
+| **headline** | **65** | TP 52 · TN 13 · **FN 0** |
+| unproven | 57 | TP 43 · **FN 14** |
+| by_construction_c3 | 6 | **FN 6** |
+| by_construction_single | 4 | TP 4 |
+| emergent | 2 | TN 2 |
+
+So `TP/(TP+FN) = 52/52 = 100%` over a denominator of 52, while 20 lines score FN in
+buckets the header never mentioned. Not a bug — but an unlabelled percentage over an
+invisible denominator is exactly the kind of number this project exists to refuse,
+and it read as a contradiction because it was one from the reader's side.
+
+**Why the buckets are so much bigger here than on the committed board.** The
+committed board generates at `UNIQUENESS_NODE_BUDGET_OFFLINE = 40_000_000` and has 3
+lines in `unproven`. A browser-triggered run cannot afford that — it generates at
+`UNIQUENESS_NODE_BUDGET_LIVE = 20_000`, and 57 lines land in `unproven` instead.
+§10.1 is explicit that the budget is not a performance knob; this is that sentence
+arriving as a headline denominator.
+
+**Fixed** on both renderers:
+
+```
+precision 100.0% (verified-unique, n=65)        recall 100.0% (verified-unique, n=65)
+69 of 134 scored lines are held out of this figure and broken out below.
+```
+
+The API now ships `headline_n` and a `buckets` array — every population by name with
+its own TP/FP/FN/TN — and the UI renders them beside the headline behind a
+`show all 5 scored buckets` control rather than implying them.
+
+---
+
+## 2. The residue gap was unexplained — and stage 10's `?` was wrong
+
+Two problems, and the second is the interesting one.
+
+The gap **is** ₹1,991.26 = 199,126 paise = exactly the four withheld records, same as
+the committed board. Nothing had drifted. But it rendered as `?` with no way to take
+it apart, because stage 10 made `reconciles` `None` for *any* deadline-cut run.
+
+**The algebra says that was over-conservative.** Closing a line `L` with composition
+`C` removes `target(L)` from the open sum and `Σ net(C)` from the unclaimed sum, so
+the gap moves by
+
+```
+Σ net(C) − target(L)  =  the line's own delta
+```
+
+and by nothing else. **An exact match moves the gap by zero.** Measured, three ways:
+
+| run | closed | gap | Σ tolerance deltas |
+|---|---|---|---|
+| nothing matched at all | 0 | ₹1,990.90 | — |
+| deadline off | 99 | ₹1,991.26 | 36 paise |
+| deadline 22 s | 99 | ₹1,991.26 | 36 paise |
+| deadline 2 s | 79 | ₹1,991.12 | 22 paise |
+
+Every row: `gap = baseline + Σδ`, to the paisa. So Phase E is computable on an
+untouched board, and the deadline's exposure is **not** the ₹1,75,751.87 those five
+cut lines total — it is at most `TOLERANCE_PAISE` each, because §8.2 caps what any
+one match may absorb at ₹1.00. **₹5.00, against a gap of ₹1,991.26.**
+
+`reconciles` is now `True` at zero, `None` only when the band could actually swallow
+the gap, and `False` otherwise. On this run it reads **`does NOT reconcile`** —
+determinate, despite the clock. Stage 10 was throwing away a bound it could compute.
+
+The `!` chip expands to the composition, straight from `audit.py` so the sentences
+and the identity live in one place:
+
+```
+residue gap ₹1,991.26   does NOT reconcile
+    Σ   35 open bank lines                          ₹12,13,724.80
+  − Σ  471 unclaimed and due transactions           ₹12,11,733.54
+      2538 claimed                    ₹66,02,380.95   excluded (§9.7)
+         0 not_yet_due                        ₹0.00   excluded (§9.7)
+         0 no_payout_expected                 ₹0.00   excluded (§9.7)
+    ₹1,990.90 of this was the gap before any line matched; closing a line moves it by
+    that line's own delta and nothing else, so the whole matcher contributed ₹0.36.
+    5 lines were cut by the deadline. §8.2 caps what one match may absorb at ₹1.00,
+    so the clock can still account for at most ₹5.00 — the rest is a hole in the books.
+```
+
+`matcher_delta_paise` is a bonus: **a second, global derivation of how much G4
+absorbed**, which agrees with the sum of the individual verdicts to the paisa.
+
+**One route I tried and threw away.** Attributing the gap per line — `target(line)`
+against its recovered settlement's total — sums to ₹5,52,722.09 against a real gap of
+₹1,991.26. Open lines resolve *bogus* anchors by prefix collision (five separate
+lines all claimed `setl_0000`), and a settlement already consumed by a closed line
+produces a meaningless residual. That is stage 10's claim confirmed the hard way: the
+per-line analysis cannot reproduce the gap, which is precisely why E1 exists.
+
+---
+
+## 3. `DUPLICATE_CREDIT` × 6 — the rule runs; the *pricing* was wrong
+
+`reversal_pairs` **does** run in the API path, and it types all six lines correctly.
+Six is the right count: three pairs × two bank lines. Each amount appears once
+closed (the genuine settlement) and twice open (the duplicate posting and its T+1
+contra), which is what §3.2 describes.
+
+The defect was one field. Every row carried the full amount as
+`amount_at_risk_paise`, so **AT RISK counted ₹1,25,737.50 twice for a pair that nets
+to zero by construction** — ₹5,13,970.88 of phantom exposure in a figure that is
+supposed to mean "the books cannot account for this".
+
+---
+
+## 4. Presentation
+
+**AT RISK is now two figures that are never added together.** `risk_class` is stamped
+on the exception in `matcher/ledger.py`, so the CLI board and the API cannot disagree
+about which column a row belongs in. Three types are `documentation`, each with a
+stated reason rather than a vibe:
+
+| type | why it is not money at risk |
+|---|---|
+| `DUPLICATE_CREDIT` | a posting and its contra; the two rows cancel exactly |
+| `AMBIGUOUS_EQUIVALENT` | §10.1 — either assignment gives **identical books** |
+| `SETTLEMENT_CONTAMINATION` | the line is **closed** with a zero delta; confirm a tagging |
+
+Everything else defaults to `at_risk`, so a new type is money until somebody argues
+otherwise.
+
+```
+AT RISK              31 items   ₹10,80,606.67   the books cannot account for this
+NEEDS DOCUMENTATION  13 items    ₹6,68,078.92   reconciled or bookkeeping-identical
+                                 ₹2,56,985.44   of it is a posting and its contra (§3.2)
+```
+
+Each reversal row now names its partner (`⇄ bl_9007`) — one half alone reads as an
+unexplained credit, and the pair is the finding.
+
+**The closed column shows the first 8** with `show all 99 closed bank lines (91
+more)`. **The `EXCEEDED_SEARCH_BUDGET` line-ID list moved into the open column**,
+where it also carries the ₹5.00 bound from issue 2. The header banner is capped at
+**two lines**.
+
+**Greenbar parity, found while doing the above.** The tint was
+`tr.row:nth-of-type(4n+3)`, and an expanded proof row is a `<tr>` too — so opening a
+strip re-banded every row beneath it. On a ledger, banding that jumps reads as the
+numbers having moved. The class now comes from the row's index in the data.
+
+---
+
+## Confirming the proof strip
+
+§13's "expands in place, no modal" is a **structural** claim, and a screenshot cannot
+settle it: a strip that is missing and a strip that is merely closed look identical.
+No browser tooling was available, so `web/check-strip.mjs` (`npm run check`) renders
+the real `<Row/>` through `react-dom/server` with `open` set and asserts on the
+markup. esbuild and `react-dom/server` are already present as Vite and React
+dependencies — no test runner, no jsdom, nothing new installed.
+
+```
+ok    closed: exactly one outer <tr>, caret pointing right
+ok    open: a second outer <tr> appears
+ok    the proof <tr> is a SIBLING of the data <tr>, not nested inside it
+ok    and it is a real table row spanning the columns above it
+ok    no modal, dialog, overlay or fixed positioning
+ok    single rule above the total (tr.total)
+ok    double rule below (div.double-under)
+ok    the tick is in the margin
+ok    figures use Indian grouping
+ok    it ties, with the delta stated
+ok    the caret flips to ▾ when open
+```
+
+It expands in place. What the screenshots were missing is that **nothing said the row
+was clickable** — there was no affordance at all. Every expandable row now carries a
+`▸`/`▾` caret in the margin, is focusable, and responds to Enter and Space.

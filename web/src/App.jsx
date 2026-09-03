@@ -31,24 +31,87 @@ function Phases({ phases, current }) {
 
 function Gap({ residue }) {
   // §13: the residue gap sits in the header — it is the global honesty indicator.
-  // Three states, not two. `null` means the run was cut by its deadline and the
-  // question is unanswerable: open lines nobody looked at are in that sum, so
-  // calling it a discrepancy would report one that does not exist (§9.10).
+  // Three states. `?` is now a *narrow* state: the gap is non-zero but smaller than
+  // what the deadline-cut lines could still absorb. It is no longer "the clock ran,
+  // so who knows" — closing a line moves the gap by that line's own delta and
+  // nothing else, and §8.2 caps that at ₹1.00, so an unfinished run has a bound.
+  const [open, setOpen] = useState(false)
   const state = residue.reconciles === null ? 'unknown'
     : residue.reconciles ? 'reconciles' : 'broken'
   const mark = residue.reconciles === null ? '?' : residue.reconciles ? '✓' : '!'
   return (
-    <div className={`gap ${state}`}>
-      <span className="eyebrow">residue gap</span>
-      <span>{fmtInr(residue.gap_paise)}</span>
-      <span>{mark}</span>
-    </div>
+    <>
+      <button className={`gap ${state}`} onClick={() => setOpen(!open)}
+               aria-expanded={open}>
+        <span className="eyebrow">residue gap</span>
+        <span>{fmtInr(residue.gap_paise)}</span>
+        <span>{mark}</span>
+        <span className="caret">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        // The composition, not just the mark. An indicator nobody can take apart
+        // is a number people learn to ignore, and this one is the whole honesty
+        // claim — so the sentences come from `audit.py`, which owns the identity.
+        <pre className="gap-composition">{residue.composition.join('\n')}</pre>
+      )}
+    </>
+  )
+}
+
+function Buckets({ buckets, headlineN }) {
+  // §11's disclosed populations, rendered **beside** the headline rather than
+  // implied by it. `recall 100.0%` next to `35 open` is not a contradiction — the
+  // headline is verified-unique lines only, and at the live 20k budget 57 of 134
+  // land in `unproven` instead — but a reader cannot know that from an unlabelled
+  // percentage. Everything held out is named here with its own outcomes.
+  const held = buckets.filter((b) => !b.in_headline)
+  return (
+    <table className="buckets">
+      <tbody>
+        {buckets.map((b) => (
+          <tr key={b.name} className={b.in_headline ? 'in-headline' : ''}>
+            <td className="bname">{b.name.replace(/_/g, ' ')}</td>
+            <td className="num">{b.n}</td>
+            <td className="bcounts">
+              {['TP', 'FP', 'FN', 'TN'].filter((k) => b.counts[k])
+                .map((k) => `${k} ${b.counts[k]}`).join('   ') || '—'}
+            </td>
+            <td className="blurb">{b.blurb}</td>
+          </tr>
+        ))}
+        <tr className="bucket-total">
+          <td className="bname">held out of the headline</td>
+          <td className="num">{held.reduce((n, b) => n + b.n, 0)}</td>
+          <td className="bcounts" />
+          <td className="blurb">
+            the headline denominator is {headlineN} of{' '}
+            {buckets.reduce((n, b) => n + b.n, 0)} scored bank lines
+          </td>
+        </tr>
+      </tbody>
+    </table>
   )
 }
 
 function Summary({ run, report }) {
-  const { residue, counts, ablation } = report
+  const { residue, counts, ablation, buckets, headline_n: n } = report
   const det = ablation.deterministic_recall ?? 0
+  const [showBuckets, setShowBuckets] = useState(false)
+
+  // Two banner lines, maximum. §9.10's line-ID list moved into the open column —
+  // a header that lists twelve bank line ids is a header nobody reads.
+  const banner = []
+  if (report.deadline.hit) {
+    const cut = report.deadline.cut.length
+    const never = report.deadline.exceeded.length
+    banner.push(
+      `deadline reached at ${report.deadline.ms?.toLocaleString('en-IN')} ms — `
+      + `${cut} lines cut mid-search, ${never} never attempted; `
+      + `${report.deadline.passes_run} of ${report.deadline.passes_asked} `
+      + `propagation passes run. Listed under OPEN ITEMS.`)
+  }
+  if (run.notes?.length) banner.push(run.notes[0])
+
   return (
     <div className="summary">
       <div className="summary-line">
@@ -78,10 +141,16 @@ function Summary({ run, report }) {
         <span className="label">·</span>
         <span className="figure">via hypothesis {report.via_hypothesis}</span>
         <span className="label">·</span>
+        {/* The denominator, in the label. Not implied, not a footnote. */}
         <span className="figure">precision {pct(report.precision)}</span>
-        <span className="label">·</span>
         <span className="figure">recall {pct(report.recall)}</span>
+        <span className="qualifier">(verified-unique, n={n})</span>
+        <button className="more inline" onClick={() => setShowBuckets(!showBuckets)}>
+          {showBuckets ? 'hide' : 'show'} all {buckets.length} scored buckets
+        </button>
       </div>
+
+      {showBuckets && <Buckets buckets={buckets} headlineN={n} />}
 
       <div className="summary-line ablation">
         <span className="label">deterministic {pct(det)}</span>
@@ -98,10 +167,9 @@ function Summary({ run, report }) {
         </span>
       </div>
 
-      {(run.notes?.length > 0 || report.deadline.hit) && (
+      {banner.length > 0 && (
         <ul className="notes">
-          {run.notes?.map((n, i) => <li key={i}>{n}</li>)}
-          {report.deadline.banner.map((line, i) => <li key={`d${i}`}>{line.trim()}</li>)}
+          {banner.map((line, i) => <li key={i}>{line}</li>)}
         </ul>
       )}
     </div>

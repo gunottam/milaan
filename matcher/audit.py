@@ -20,11 +20,35 @@ would read as a standing discrepancy that no reconciliation could ever close, an
 number that is always wrong gets ignored.
 
 **Runs on partial results.** §9.10: when the deadline fires, the ladder stops
-issuing work and Phase E runs on what was proved. Nothing here needs the clock, so
-the only accommodation required is honesty about the answer — a deadline-cut run has
-open lines nobody looked at, and their whole target sits in the gap. `partial` says
-so, and `reconciles` is `None` rather than `False` in that state, because a gap that
-includes unattempted lines is not evidence of a hole in the books.
+issuing work and Phase E runs on what was proved.
+
+**And the partial answer is very nearly the whole answer, which stage 10 got wrong.**
+Stage 10 marked a deadline-cut run `reconciles = None` on the reasoning that "open
+lines nobody looked at have their whole target in the gap". The algebra says
+otherwise. Closing a line `L` with composition `C` removes `target(L)` from the open
+sum and `Σ net(C)` from the unclaimed sum, so the gap moves by exactly
+
+    Σ net(C) − target(L)  =  the line's own delta
+
+and by nothing else. An exact match therefore leaves the gap **unchanged**, and the
+figure is already final before the first tier runs. Measured on seed 42 at the live
+budget: the gap before any matching is ₹1,990.90; after 99 closures it is ₹1,991.26,
+and the 36-paise difference is precisely the sum of the tolerance deltas of the five
+G4 matches. At a 2 s deadline, 79 closures, gap ₹1,991.12, Σδ = 22 paise. Every time.
+
+So the deadline's exposure is not the target of the lines it cut — it is at most
+`TOLERANCE_PAISE` per cut line, because §8.2 caps what a single match may absorb at
+₹1.00. `reconciles` is `None` only when that band actually swallows the gap; a gap
+larger than the band is a hole in the books whether or not the clock ran out, and
+saying "indeterminate" there throws away a number we can bound.
+
+**The one caveat, stated because it is the identity's only escape hatch:** the
+cancellation holds when the composition was counted in `unclaimed_due`. A claim that
+cites an unsettled transaction, or a member of a `no_payout_expected` settlement,
+takes it from a bucket the gap never counted, so closing that line moves the gap by
+`−target(L)` instead. G1 permits it for an anchor\'s own members (§9.3). Both those
+buckets are empty on seed 42, so it cannot arise there; where they are not, the
+census is what shows it.
 """
 
 from __future__ import annotations
@@ -34,6 +58,7 @@ from dataclasses import dataclass
 
 from core.models import BankLine, GatewayTxn, target
 from core.money import Paise, fmt_inr
+from core.subsetsum import TOLERANCE_PAISE
 
 # §9.7's four states, in the order the table gives them. `settled=false` and
 # `no_payout_expected` are the two exclusions finding 8.8 exists for.
@@ -99,47 +124,103 @@ class Residue:
     unclaimed_due: tuple[str, ...]
     no_payout_expected: tuple[str, ...]
     partial: bool = False
+    # The gap as it stood before any line matched — `Σ every bank line` against
+    # `Σ every due transaction`. Phase E is computable on an untouched board, and
+    # the difference between this and `gap_paise` is the entire contribution the
+    # matcher made to the figure.
+    baseline_gap_paise: Paise = 0
+    # Open bank lines the run\'s clock stopped. Their exposure is bounded by §8.2,
+    # not by their targets — see the module docstring.
+    cut_lines: tuple[str, ...] = ()
+
+    @property
+    def matcher_delta_paise(self) -> Paise:
+        """Everything the matcher added to the baseline gap.
+
+        By the identity in the module docstring this is exactly the sum of the
+        tolerance deltas of the matches it made — an exact match contributes zero.
+        It is therefore a *second* reading of how much G4 absorbed, derived globally
+        rather than by adding up verdicts, and the two agree to the paisa.
+        """
+        return self.gap_paise - self.baseline_gap_paise
+
+    @property
+    def deadline_slack_paise(self) -> Paise:
+        """The most the clock can still account for: §8.2\'s ₹1.00 cap, per cut line.
+
+        Not the sum of their targets. A line that closes exactly moves the gap by
+        zero, so the only way an unfinished line can change this figure is by
+        eventually closing on a tolerance match, and G4 will not absorb more than
+        `TOLERANCE_PAISE` on any one of them.
+        """
+        return TOLERANCE_PAISE * len(self.cut_lines)
 
     @property
     def reconciles(self) -> bool | None:
-        """`True` when the gap is zero, `False` when it is not, `None` when the run
-        was cut short and the question is unanswerable.
+        """`True` when the gap is zero, `None` when the deadline band could still
+        account for all of it, `False` otherwise.
 
-        Three values on purpose. A deadline-cut run has open lines no tier ever
-        examined, so its gap is measuring the clock rather than the books, and
-        answering `False` would report a discrepancy that does not exist.
+        Three values, but not stage 10\'s three. `None` is now a narrow and earned
+        state — the gap is non-zero and smaller than what the unfinished lines could
+        still absorb — rather than the blanket "the clock ran, so who knows" that
+        discarded a bound we can compute.
         """
-        return None if self.partial else self.gap_paise == 0
+        if self.gap_paise == 0:
+            return True
+        return None if abs(self.gap_paise) <= self.deadline_slack_paise else False
+
+    def composition(self) -> list[str]:
+        """What the gap is made of, in sentences a reader can check.
+
+        §13 puts the gap in the header as the global honesty indicator, and an
+        indicator nobody can decompose is a number people learn to ignore. Every
+        line below is either one of the two sums or a consequence of the identity
+        in the module docstring.
+        """
+        out = [f"    Σ {len(self.open_lines):>4} open bank lines"
+               f"{fmt_inr(self.open_lines_paise):>18}",
+               f"  − Σ {self.census['unclaimed_due']:>4} unclaimed and due transactions"
+               f"{fmt_inr(self.unclaimed_due_paise):>18}"]
+        for state in ("claimed", "not_yet_due", "no_payout_expected"):
+            out.append(f"      {self.census[state]:>4} {state:<36}"
+                       f"{fmt_inr(self.sums[state]):>14}   excluded (§9.7)")
+        out.append(
+            f"    {fmt_inr(self.baseline_gap_paise)} of this was the gap before any "
+            f"line matched; closing a line moves it by")
+        out.append(
+            f"    that line's own delta and nothing else, so the whole matcher "
+            f"contributed {fmt_inr(self.matcher_delta_paise)}.")
+        if self.cut_lines:
+            out.append(
+                f"    {len(self.cut_lines)} lines were cut by the deadline. §8.2 caps "
+                f"what one match may absorb at {fmt_inr(TOLERANCE_PAISE)}, so the "
+                f"clock can still")
+            out.append(
+                f"    account for at most {fmt_inr(self.deadline_slack_paise)} of "
+                + ("this — the rest is a hole in the books."
+                   if self.reconciles is False else
+                   "this, which covers the whole gap."))
+        if self.no_payout_expected:
+            out.append(f"      {len(self.no_payout_expected)} settlements net zero, so "
+                       f"no payout is expected (§5.1): "
+                       f"{', '.join(self.no_payout_expected[:4])}"
+                       + (" …" if len(self.no_payout_expected) > 4 else ""))
+        return out
 
     def lines(self) -> list[str]:
         """The header's honesty indicator (§13), and the census behind it."""
-        verdict = ("indeterminate — the run was cut short" if self.reconciles is None
+        verdict = ("indeterminate — inside the deadline's tolerance band"
+                   if self.reconciles is None
                    else "reconciles" if self.reconciles
                    else "does NOT reconcile")
-        out = [f"  residue gap {fmt_inr(self.gap_paise)}   {verdict}",
-               f"    {len(self.open_lines):>4} open bank lines"
-               f"{fmt_inr(self.open_lines_paise):>18}",
-               f"    {self.census['unclaimed_due']:>4} unclaimed and due transactions"
-               f"{fmt_inr(self.unclaimed_due_paise):>18}"]
-        for state in ("claimed", "not_yet_due", "no_payout_expected"):
-            out.append(f"    {self.census[state]:>4} {state:<38}"
-                       f"{fmt_inr(self.sums[state]):>14}   excluded (§9.7)")
-        if self.no_payout_expected:
-            out.append(f"    {len(self.no_payout_expected)} settlements net zero, "
-                       f"so no payout is expected (§5.1): "
-                       f"{', '.join(self.no_payout_expected[:4])}"
-                       + (" …" if len(self.no_payout_expected) > 4 else ""))
-        if self.partial:
-            out.append("    !! the deadline cut this run, so open lines include "
-                       "ones no tier examined;")
-            out.append("       their whole target sits in the gap and it is not "
-                       "evidence of a hole.")
-        return out
+        return [f"  residue gap {fmt_inr(self.gap_paise)}   {verdict}",
+                *self.composition()]
 
 
 def residue_gap(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                 matched: Iterable[str], claimed: Iterable[str], *,
-                partial: bool = False) -> Residue:
+                partial: bool = False,
+                cut_lines: Iterable[str] = ()) -> Residue:
     """E1: `Σ open bank lines` against `Σ unclaimed-and-due transactions`.
 
     `matched` is the set of closed `bank_line_id`s; `claimed` the set of entity ids
@@ -172,8 +253,18 @@ def residue_gap(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
     open_sum = sum(target(b) for b in bank_lines if b.bank_line_id in set(open_lines))
     due_sum = sum(t.net for t in buckets["unclaimed_due"])
 
+    # The same subtraction with `claimed` empty: what the gap was before the ladder
+    # ran. Computed here rather than by the caller so the two sums are formed by one
+    # piece of code and cannot drift into disagreeing about the partition.
+    baseline_due = sum(t.net for t in txns
+                       if t.settled and t.settlement_id not in zero_net)
+    baseline_open = sum(target(b) for b in bank_lines)
+
+    cut = tuple(sorted(set(cut_lines) & set(open_lines)))
     return Residue(
         gap_paise=open_sum - due_sum,
+        baseline_gap_paise=baseline_open - baseline_due,
+        cut_lines=cut,
         open_lines_paise=open_sum,
         unclaimed_due_paise=due_sum,
         open_lines=open_lines,
