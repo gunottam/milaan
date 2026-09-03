@@ -55,6 +55,17 @@ class SearchProposer:
         self._recovery = ([RegexProposer(t, txns) for t in ("A1", "A2", "A3")]
                           if tier == "C1" else [])
         self._members = settlement_members(txns)
+        # `bank_line_id -> settlement ids` recovered by something other than this
+        # tier's own regex — in practice Detective Pass A (§9.6). §9.1's amendment
+        # is the reason this exists: Pass A's product is an *anchor*, and the recall
+        # it enables is booked here as a C1 closure. Without this dict a recovered
+        # UTR could only close a line whose settlement group alone equals the
+        # credit, which the amendment measured as the rare case.
+        #
+        # It is a plain dict of ids, not a claim: C1 still builds the composition,
+        # G1 still checks every entity, G2 still re-adds the nets. A model-supplied
+        # anchor buys a search, never an approval.
+        self.extra_anchors: dict[str, set[str]] = {}
         # bank_line_id -> why nothing was searched. Read by the orchestrator into
         # the trace; stage 10's exception ledger is what types it. A refusal that
         # left no record would be indistinguishable from a search that found
@@ -101,10 +112,12 @@ class SearchProposer:
     def _anchors(self, line: BankLine) -> list[str]:
         """Settlement ids Phase A can recover from this line's narration, in a
         deterministic order (§8.6)."""
-        return sorted({claim.anchor_settlement_id
-                       for tier in self._recovery
-                       for claim in tier.propose(line, ())
-                       if claim.anchor_settlement_id is not None})
+        found = {claim.anchor_settlement_id
+                 for tier in self._recovery
+                 for claim in tier.propose(line, ())
+                 if claim.anchor_settlement_id is not None}
+        return sorted(found | {sid for sid in self.extra_anchors.get(
+            line.bank_line_id, ()) if sid in self._members})
 
     # --- C2, unanchored ------------------------------------------------------
 

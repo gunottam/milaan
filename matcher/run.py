@@ -62,6 +62,10 @@ class Run:
 
     matched: Matched
     trace: list[dict]
+    # The tier objects the run used. Carried so the scoreboard can read Phase D's
+    # token accounting off them (§11's cost per 1k records) without the ladder
+    # having to know what a token is.
+    tiers: tuple = ()
     exceeded: tuple[str, ...] = ()
     passes_run: int = 0
     passes_asked: int = PROPAGATION_PASSES
@@ -113,15 +117,32 @@ class Run:
         return out
 
 
-def build_tiers(txns: Sequence[GatewayTxn], window_days: int = 2) -> list:
+def build_tiers(txns: Sequence[GatewayTxn], window_days: int = 2, *,
+                detective: bool = False) -> list:
     """The ladder, in order. Separate from `run_ladder` so a caller can measure one
     tier's reach by handing back a prefix of it — which is how stage 8 scores C1
-    alone against the prediction stage 7 registered for it."""
-    return [RegexProposer("A1", txns), RegexProposer("A2", txns),
-            RegexProposer("A3", txns), LookupProposer("B1", txns, window_days),
-            LookupProposer("B2", txns, window_days),
-            SearchProposer("C1", txns, window_days),
-            SearchProposer("C2", txns, window_days)]
+    alone against the prediction stage 7 registered for it.
+
+    **`detective=False` is the ablation, and it is a filter over the tier list
+    rather than a special case anywhere else** (§7.2). Nothing in the verification
+    layer changes between the two configurations; the recall difference between them
+    is §11's ablation delta.
+
+    D1 and D2 sit after C2, which is §12's phase order (`phase_c` then
+    `detective_a`, `detective_b`). Pass A's recovered anchors are handed to C1 and
+    pay off on the second propagation pass — §9.1's amendment, and the reason the
+    ablation delta understates Pass A.
+    """
+    tiers = [RegexProposer("A1", txns), RegexProposer("A2", txns),
+             RegexProposer("A3", txns), LookupProposer("B1", txns, window_days),
+             LookupProposer("B2", txns, window_days),
+             SearchProposer("C1", txns, window_days),
+             SearchProposer("C2", txns, window_days)]
+    if detective:
+        from detective.propose import DetectiveProposer
+        tiers += [DetectiveProposer("D1", txns, window_days),
+                  DetectiveProposer("D2", txns, window_days)]
+    return tiers
 
 
 def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
@@ -149,6 +170,7 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
     by_id = {t.entity_id: t for t in txns}
     tiers = build_tiers(txns, window_days) if tiers is None else tiers
     b1 = next((t for t in tiers if t.name == "B1"), None)
+    c1 = next((t for t in tiers if t.name == "C1"), None)
     last = tiers[-1].name if tiers else None
 
     claimed: set[str] = set()
@@ -188,6 +210,22 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                      for b in open_lines}
             order = sorted(open_lines,
                            key=lambda b: (len(pools[b.bank_line_id]), b.bank_line_id))
+
+            # A tier that batches does its work here, once, before the sweep. §9.6
+            # batches 25 narrations and 5 hypotheses per call while the `Proposer`
+            # protocol is per-line, so batching cannot live inside `propose()`. The
+            # `hasattr` probe is the same shape as `deadline_ns` and `release` above
+            # — the ladder asks what a tier can do rather than knowing its type.
+            if hasattr(tier, "prepare"):
+                tier.prepare(order, pools, frozenset(claimed), pass_no)
+                # §9.1's amendment: Pass A's product is an anchor, not a
+                # composition. Handing it to C1 is what turns a recovered
+                # identifier into a closure, and it lands on the next propagation
+                # pass — which is why the ablation delta reads as a C1 gain.
+                found = getattr(tier, "recovered_anchors", None)
+                if found and c1 is not None:
+                    for bid, anchors in found.items():
+                        c1.extra_anchors.setdefault(bid, set()).update(anchors)
 
             for line in order:
                 now = time.monotonic_ns()
@@ -251,6 +289,16 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                     "tied": tied,
                 })
                 if won is None:
+                    # §9.6's second round is only worth its tokens if it knows
+                    # something the first did not. The rejection reason is the one
+                    # piece of verification output the detective ever sees, and it
+                    # is a *rejection* — knowing why a claim failed cannot
+                    # manufacture a passing one, so the layer split holds.
+                    reasons = [v.reason for _, v in verdicts if v.reason]
+                    for t in tiers:
+                        if getattr(t, "name", "") == "D2" and reasons:
+                            t.rejected.setdefault(line.bank_line_id, []).extend(
+                                reasons[:2])
                     continue
                 matched[line.bank_line_id] = (tier.name, won, verdict)
                 claimed |= set(won.composition)
@@ -260,7 +308,7 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
             passes_run = pass_no
 
     return Run(
-        matched=matched, trace=trace,
+        matched=matched, trace=trace, tiers=tuple(tiers),
         exceeded=tuple(sorted(b.bank_line_id for b in bank_lines
                               if b.bank_line_id not in matched
                               and b.bank_line_id not in walked)),

@@ -205,14 +205,26 @@ def test_the_phase_enum_is_the_specs(client):
     assert "propagation_2" in PHASES
 
 
-def test_use_llm_is_honoured_by_being_refused():
-    """I4 and honesty. The detective is stage 12; a run that reported `use_llm` as
-    satisfied would put a number on the board no code produced, so the request is
-    accepted, ignored, and disclosed on the board itself."""
-    quiet = run_notes(RunRequest(use_llm=False))
+def test_use_llm_is_disclosed_when_phase_d_cannot_run():
+    """I4 and honesty. Phase D exists as of stage 12, but a run without API
+    credentials cannot use it — and a board reporting `use_llm: true` as satisfied
+    would put a number on the screen no model produced. Accepted, not run, disclosed.
+
+    Asserted on the substance: when the detective is unavailable the note says so
+    and names the ablated configuration; when it is available there is nothing to
+    disclose, because the pass actually ran.
+    """
+    from detective.propose import available
+
     loud = run_notes(RunRequest(use_llm=True))
-    assert not any("stage 12" in note for note in quiet)
-    assert any("stage 12" in note and "deterministic" in note for note in loud)
+    quiet = run_notes(RunRequest(use_llm=False))
+    assert not any("Phase D" in note for note in quiet)
+    if available():
+        assert not any("Phase D" in note for note in loud), (
+            "credentials resolved, so there is nothing to disclose")
+    else:
+        assert any("Phase D could not run" in note and "ablated" in note
+                   for note in loud)
 
 
 def test_the_generation_budget_is_named_on_every_run():

@@ -3,6 +3,13 @@ name = "milaan"
 version = "0.1.0"
 requires-python = ">=3.11"
 
+# The detective is optional on purpose. A run without it is §11's ablated
+# configuration — a first-class, reported outcome — so the SDK is an extra rather
+# than a hard dependency, and `detective/propose.py` imports it lazily. `pytest -q`
+# passes with or without it installed.
+[project.optional-dependencies]
+detective = ["anthropic>=0.60"]
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"

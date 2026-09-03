@@ -208,7 +208,7 @@ and clicking a closed row expands the arithmetic.
 
 ---
 
-## [ ] Stage 12 — detective
+## [x] Stage 12 — detective
 
 > Read `@docs/spec.md` section 9.6. Build `detective/`: Pass A (narration strings only, batch
 > 25, concurrent), Pass B (structured amounts and IDs, batch 5, 2 rounds), five claim types

@@ -37,7 +37,8 @@ from generator.config import (SETTLEMENT_WINDOW_DAYS,
                               UNIQUENESS_NODE_BUDGET_DEMO,
                               UNIQUENESS_NODE_BUDGET_OFFLINE)
 from generator.generate import emit, generate
-from matcher.run import MATCH_DEADLINE_MS, run_ladder
+from detective.propose import available as detective_available
+from matcher.run import MATCH_DEADLINE_MS, build_tiers, run_ladder
 from scoring.score import (BUCKETS, DISCLOSED, all_lines, phase_e, precision,
                            recall, score)
 
@@ -108,7 +109,7 @@ def _touch(state: RunState, **fields) -> None:
 
 
 def build_report(run_dir: Path, deadline_ms: int | None = MATCH_DEADLINE_MS,
-                 on_tier=None) -> dict:
+                 on_tier=None, *, detective: bool = False) -> dict:
     """Match, audit, score and serialise one run directory.
 
     The same three calls `scoring.score.main` makes, in the same order, so the JSON
@@ -122,6 +123,8 @@ def build_report(run_dir: Path, deadline_ms: int | None = MATCH_DEADLINE_MS,
     orders = read_csv(run_dir / "orders.csv", Order)
 
     ladder = run_ladder(txns, bank_lines, truth["config"]["window_days"],
+                        tiers=build_tiers(txns, truth["config"]["window_days"],
+                                          detective=detective),
                         deadline_ms=deadline_ms, on_tier=on_tier)
     compositions = {bid: claim.composition
                     for bid, (_, claim, _) in ladder.matched.items()}
@@ -134,6 +137,13 @@ def build_report(run_dir: Path, deadline_ms: int | None = MATCH_DEADLINE_MS,
 
     counts = report.counts("headline")
     every = all_lines(report)
+    # Phase D's own accounting, read off the tier objects the ladder used.
+    from detective.propose import cost_paise as detective_cost
+    from detective.propose import cost_per_1k_records as detective_cost_per_1k
+    from detective.schema import Usage
+    phase_d = [t for t in ladder.tiers if getattr(t, "name", "") in ("D1", "D2")]
+    total_usage = sum((t.usage for t in phase_d), start=Usage())
+    detective_ran = any(t.usage.calls for t in phase_d)
     lines = {b.bank_line_id: b for b in bank_lines}
     tiers = {tier for tier, _, _ in ladder.matched.values()}
 
@@ -245,12 +255,29 @@ def build_report(run_dir: Path, deadline_ms: int | None = MATCH_DEADLINE_MS,
         # §11: the wall clock is a property of the machine, so it is reported
         # beside the board and never folded into it.
         "elapsed_ms": ladder.elapsed_ms,
-        # Stage 12 has not happened. The ablation delta is deterministic-vs-full and
-        # there is no full yet, so it is reported absent rather than as a number
-        # equal to the deterministic one — those render identically and mean
-        # opposite things.
-        "ablation": {"deterministic_recall": recall(counts), "full_recall": None,
-                     "detective_available": False},
+        # §11's ablation delta. `full_recall` stays `None` unless Phase D actually
+        # ran — absent and "the agent contributed nothing" render identically and
+        # mean opposite things, so the board must not print a number for the first.
+        # Read the delta as Pass A's floor (§9.1's amendment): the recall a
+        # recovered identifier unlocks is booked as a C1 closure, so ablating the
+        # model removes the anchor and the C1 closure disappears with it.
+        "ablation": {
+            "deterministic_recall": recall(counts),
+            "full_recall": recall(counts) if detective_ran else None,
+            "detective_available": detective_available(),
+            "detective_ran": detective_ran,
+            "passes": [{"tier": t.name, "calls": t.usage.calls,
+                        "input_tokens": t.usage.input_tokens,
+                        "output_tokens": t.usage.output_tokens,
+                        "malformed": t.usage.malformed,
+                        "cost_paise": detective_cost(t.usage),
+                        "anchors_recovered": len(
+                            getattr(t, "recovered_anchors", {}))}
+                       for t in phase_d],
+            "cost_paise": detective_cost(total_usage),
+            "cost_per_1k_records_paise": detective_cost_per_1k(
+                total_usage, len(txns)),
+        },
     }
 
 
@@ -268,9 +295,12 @@ def run_notes(request: RunRequest) -> list[str]:
              f"demo budget, which reaches the same verified population as the "
              f"{UNIQUENESS_NODE_BUDGET_OFFLINE:,} offline run; a handful of lines "
              "remain unproven and are disclosed by bucket"]
-    if request.use_llm:
-        notes.append("use_llm was requested and ignored: Detective Pass A/B is "
-                     "stage 12. Every match below is deterministic.")
+    if request.use_llm and not detective_available():
+        # Accepted, not run, and disclosed. A board that reported `use_llm: true`
+        # as satisfied would put a number on the screen no model produced.
+        notes.append("use_llm was requested and Phase D could not run: no API "
+                     "credentials resolved. Every match below is deterministic, "
+                     "which is §11's ablated configuration.")
     return notes
 
 
@@ -305,7 +335,9 @@ def _execute(state: RunState) -> None:
 
         state.notes.extend(run_notes(state.request))
 
-        report = build_report(run_dir, on_tier=on_tier)
+        report = build_report(run_dir, on_tier=on_tier,
+                              detective=state.request.use_llm
+                              and detective_available())
         (run_dir / "report.json").write_text(
             json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         _touch(state, status="done", phase="done", progress=1.0,

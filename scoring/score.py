@@ -29,7 +29,7 @@ from core.money import fmt_inr
 from generator.config import UNIQUENESS_NODE_BUDGET_OFFLINE
 from matcher import ledger as exception_ledger
 from matcher.audit import Residue, coherence_audit, residue_gap
-from matcher.run import MATCH_DEADLINE_MS, Run, run_ladder
+from matcher.run import MATCH_DEADLINE_MS, Run, build_tiers, run_ladder
 
 # Bucket -> what sits in it, and why it is not in the headline.
 BUCKETS = {
@@ -332,6 +332,44 @@ def _reconciliation(residue: Residue, ledger: exception_ledger.Ledger) -> list[s
             "    only figure here that survives a line nothing could identify."]
 
 
+def ablation_line(ladder: Run, records: int) -> list[str]:
+    """§11's ablation delta, and the cost that bought it.
+
+    **Reported as a floor, not as the model's contribution** (§9.1's amendment).
+    Pass A recovers identifiers, and the recall those identifiers unlock is booked
+    as C1 closures under a deterministic tier — ablating the model removes the
+    anchor and the C1 closure disappears with it. So the honest framing is "at
+    least this much", with anchors recovered printed beside lines closed.
+
+    A run with no detective tier prints what is missing rather than a zero: absent
+    and "contributed nothing" render identically and are not the same fact.
+    """
+    from detective.propose import cost_paise, cost_per_1k_records
+
+    passes = [t for t in (ladder.tiers or ()) if getattr(t, "name", "") in ("D1", "D2")]
+    if not passes:
+        return ["  ablation   deterministic only — Phase D was not in this run. "
+                "Re-run with --detective for the delta."]
+    out = []
+    total = sum((t.usage for t in passes), start=passes[0].usage.__class__())
+    for t in passes:
+        u = t.usage
+        out.append(f"  {t.name}   {u.calls:>3} calls   "
+                   f"{u.input_tokens:>7,} in  {u.output_tokens:>6,} out   "
+                   f"{fmt_inr(cost_paise(u)):>10}   "
+                   f"malformed {u.malformed}")
+    unavailable = [t.name for t in passes
+                   if any(r.startswith("DETECTIVE_UNAVAILABLE")
+                          for r in t.refusals.values())]
+    if unavailable:
+        out.append(f"  !! {', '.join(unavailable)} never ran — no API credentials "
+                   "resolved. This board is the ablated configuration.")
+    out.append(f"  cost {fmt_inr(cost_paise(total))} total, "
+               f"{fmt_inr(cost_per_1k_records(total, records))} per 1,000 records "
+               f"(§11, in paise)")
+    return out
+
+
 def render(report: Report, truth: Mapping, ladder: Run,
            anchors: Mapping, at_risk: Mapping[str, int], run: Path,
            residue: Residue, ledger: exception_ledger.Ledger) -> str:
@@ -360,6 +398,7 @@ def render(report: Report, truth: Mapping, ladder: Run,
            f"wrong {anchors['wrong']}, no true anchor {anchors['no_true_anchor']}) "
            f"· lines closed {len(matched)}",
            f"  propagation pass 2 closed {_pass_two(trace)}",
+           *ablation_line(ladder, cfg["records"]),
            *budget_banner(truth), *ladder.banner(), "",
            # §13: the residue gap sits in the header — it is the global honesty
            # indicator, and it is the one number here derived without reference to
@@ -442,6 +481,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="a directory holding the three CSVs and truth.json")
     ap.add_argument("--json", type=Path, default=None,
                     help="also write the scored report here")
+    ap.add_argument("--detective", action="store_true",
+                    help="include Phase D (§9.6). Omit it for the ablated run — "
+                         "§11's ablation delta is the difference between the two")
     ap.add_argument("--deadline-ms", type=int, default=MATCH_DEADLINE_MS,
                     help="run-level deadline (§9.10). 0 disables it, which is "
                          "§11's reproducible node-budget-only mode")
@@ -454,6 +496,8 @@ def main(argv: list[str] | None = None) -> int:
     orders = read_csv(args.run / "orders.csv", Order)
 
     ladder = run_ladder(txns, bank_lines, truth["config"]["window_days"],
+                        tiers=build_tiers(txns, truth["config"]["window_days"],
+                                          detective=args.detective),
                         deadline_ms=args.deadline_ms)
     matched, trace = ladder.matched, ladder.trace
     compositions = {bid: claim.composition for bid, (_, claim, _) in matched.items()}
