@@ -12,10 +12,22 @@ Build stages: `docs/build-stages.md`. **Read only the spec sections a stage name
 ## Verify before claiming done
 
 ```bash
-pytest -q                        # must be green before any stage is complete
+pytest -q                        # 17 s fast sweep — green before any stage is complete
+pytest -q -m slow                # ~6 min, the 134-line seed-42 board. See below
 pytest tests/test_invariants.py  # the invariant enforcement, run it constantly
 pytest tests/test_subsetsum.py   # includes the brute-force property test
 ```
+
+`pyproject.toml` applies `-m 'not slow'`, so **`pytest -q` does not run the measurements.**
+The `slow` set is every test whose assertion lives on the full board — pinned tier counts,
+recall figures, the anchor census, the committed-board residue gap and ledger. Six of them
+run an uncapped ladder at ~45 s each. `tests/conftest.py` marks them automatically from the
+fixture closure, so a new test that uses a board fixture is marked without anyone
+remembering to.
+
+Run the fast sweep constantly. **Run `-m slow` before committing a stage, and always if you
+touched `matcher/`, `generator/` or `scoring/`** — a change that moves a measured count is
+invisible to the fast sweep. Stage 14's regression must run it (`docs/build-stages.md`).
 
 Never report a stage complete without running these. If a command could not be run, say so.
 

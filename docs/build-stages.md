@@ -242,9 +242,22 @@ and clicking a closed row expands the arithmetic.
 > Read `@docs/spec.md` section 11. Run ten seeds offline with **node budget only, no wall
 > clock**, write `regression.json`, render it as a static table.
 >
+> **Run `pytest -q -m slow` as part of this stage, not `pytest -q`.** Stage 11c split the
+> suite: `pytest -q` is a 17 s sweep with `-m 'not slow'` applied from `pyproject.toml`, and
+> the 72 tests it deselects are the ones whose assertions live on the full 134-line seed-42
+> board — every pinned tier count, every measured recall figure, the anchor census, the
+> committed-board residue gap and ledger. Those are exactly the numbers a regression exists
+> to defend. A stage-14 run that shells `pytest -q` and sees green has checked the gates and
+> the solver and none of the measurements.
+>
+> `regression.json` and the slow set answer different questions and both are required: the
+> regression measures **variance across seeds**, the slow set pins **the committed seed at
+> the offline budget**. A change that moves seed 42 and nothing else passes the first and
+> fails the second.
+>
 > Then stop building. Rehearse the live-seed run until it cannot fail.
 
-**Done when:** `regression.json` shows mean ± σ recall across ten seeds, and three
-consecutive live runs on judge-chosen seeds complete inside 60 s.
+**Done when:** `pytest -q -m slow` is green (~6 min), `regression.json` shows mean ± σ recall
+across ten seeds, and three consecutive live runs on judge-chosen seeds complete inside 60 s.
 
 `git commit -m "stage 14: offline regression, freeze"`

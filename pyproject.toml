@@ -13,3 +13,11 @@ packages = ["core", "matcher", "generator", "detective", "scoring", "api"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+# `pytest -q` runs the fast sweep. `pytest -q -m slow` runs the board set; a `-m`
+# on the command line replaces this one rather than adding to it, so `-m slow`
+# and `-m ""` (everything) both work.
+addopts = "-m 'not slow'"
+markers = [
+  "slow: needs the full 134-line seed-42 board. Six of these run an uncapped ladder at ~45 s each, so they are opt-in — see tests/conftest.py::pytest_collection_modifyitems. Stage 14's regression MUST run them.",
+]

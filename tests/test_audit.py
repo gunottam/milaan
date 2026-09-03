@@ -94,8 +94,14 @@ def test_the_residue_gap_equals_the_withheld_net(isolated):
     assert residue.reconciles is False
 
 
+@pytest.mark.slow
 def test_the_gap_survives_every_other_break_on_the_committed_board():
     """Same claim, all fifteen injectors live.
+
+    Marked `slow` by hand rather than by the fixture hook: it reads the committed
+    CSVs directly and runs its own uncapped ladder, so there is no fixture for
+    `conftest.pytest_collection_modifyitems` to key on. The weaker half of this
+    claim still runs in the default sweep, on the isolated dataset above.
 
     Four `WITHHELD_RECORD`s are injected into seed 42 and truth records each one's
     shortfall in its `unresolvable_reason`. Every other open line on the board —

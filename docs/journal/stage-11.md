@@ -5,7 +5,7 @@ Written for someone who knows `docs/spec.md` and has not read the code.
 Spec sections read: **§12** (API), **§13** (UI). Plus the experiment stage 10 recorded
 and declined to run.
 
-`pytest -q`: **221 passed, 0 skipped** (212 at first commit; stages 11a and 11b below add 9). Twelve are new in `tests/test_api.py`,
+`pytest -q`: **149 passed in 16.9 s**; `pytest -q -m slow`: **72 passed in 6 m 15 s** — 221 in total, split at stage 11c below (212 at first commit; 11a and 11b add 9). Twelve are new in `tests/test_api.py`,
 two in `tests/test_gates.py`, and seven pinned counts moved and were re-pinned to measured
 values.
 
@@ -655,3 +655,108 @@ ok    the delta is on its own line, not sharing a row with the tie sentence
 
 One assertion was written with a `|| true` in it while I was iterating and has been
 deleted rather than shipped. A green that cannot fail is worse than no green.
+
+---
+
+# Stage 11c — splitting the suite, and what was actually slow
+
+`pytest -q`: **149 passed in 16.9 s.** `pytest -q -m slow`: **72 passed in 6 m 15 s.**
+149 + 72 = 221, the whole suite, nothing dropped.
+
+---
+
+## The diagnosis was wrong and the request was right
+
+The brief said runtime went from 28 s to 394 s "when the fixture moved to the 5M
+budget." **The fixture never moved.** `tests/conftest.py` has generated seed 42 at
+`NODE_BUDGET = 2_000_000` since stage 7 and still does; the 5 M constant added at
+stage 11b is `UNIQUENESS_NODE_BUDGET_DEMO`, and its only consumer is `api/main.py`
+when a browser asks for a run. No test uses it.
+
+`--durations=25` says where the 392 s goes:
+
+| cost | test |
+|---|---|
+| 88.9 s | `test_orchestration` setup — the 2 M generate plus several uncapped ladders |
+| 45.0 s | `test_audit::test_the_gap_survives_every_other_break_on_the_committed_board` |
+| 44.9 s | `test_api` `report` fixture — `build_report(SEED42, deadline_ms=None)` |
+| 44.9 s | `test_audit` `board` fixture |
+| 44.6 s | `test_phase_c` `full` fixture |
+| 44.1 s | `test_audit::test_the_ledger_is_reproducible_across_two_builds` |
+| 41.8 s | `test_phase_c` `with_c1` fixture |
+| 16.5 s | `test_breaks` setup — the 2 M generate |
+| **~21 s** | **everything else, 213 tests** |
+
+**Six tests each run `run_ladder(deadline_ms=None)` over 134 lines at ~45 s
+apiece.** That is stage 11's regex widening, and the journal above already priced it:
+the uncapped board went from 25.6 s to 43.8 s because A3 now hands C1 up to 123
+candidate anchors per line (§9.5) and with no clock every one is searched to
+exhaustion. The 2 M generate is 13 s of the 392, unchanged since stage 7.
+
+So the axis is not fast-budget versus slow-budget. It is **"does this test's
+assertion live on the 134-line board"** — because that is what an uncapped ladder
+costs, and those are the tests that need one.
+
+---
+
+## The split
+
+`pyproject.toml` gains the marker and applies `-m 'not slow'` in `addopts`. A `-m`
+on the command line **replaces** it rather than adding to it, so `-m slow` runs the
+board set and `-m ""` runs everything.
+
+Marking is **keyed on the fixture closure, not on the test**:
+
+```python
+BOARD_FIXTURES = frozenset({"seed42", "board", "report"})
+
+def pytest_collection_modifyitems(config, items):
+    for item in items:
+        if BOARD_FIXTURES & set(getattr(item, "fixturenames", ())):
+            item.add_marker(pytest.mark.slow)
+```
+
+Six lines, and it is the right six. A decorator per test is a list that drifts the
+moment somebody adds one; `item.fixturenames` is the transitive closure pytest has
+already computed, so `run`, `baseline`, `with_c1` and `full` are all caught through
+their dependency on `seed42` without naming any of them. A new test that touches a
+board fixture is marked without anyone remembering to.
+
+Exactly one test needed a hand-written `@pytest.mark.slow`:
+`test_the_gap_survives_every_other_break_on_the_committed_board` reads the committed
+CSVs directly and runs its own ladder, so there is no fixture to key on. The comment
+on it says why.
+
+---
+
+## What the default sweep still covers
+
+The 149 fast tests are not a smoke screen. They keep:
+
+- every gate rejection (`test_gates`, 26)
+- §6.3's brute-force property test against the DFS (`test_subsetsum`, 13)
+- the fee and money golden cases (`test_fees`, 17)
+- all five invariant greps (`test_invariants`)
+- §10.2's six delta diagnostics, on hand-built transactions
+- the hand-built ledger and audit cases — reversal pairs, the risk split, the orders
+  tie-out, the four-way partition arms
+- **§9.7's acceptance criterion.** `test_the_residue_gap_equals_the_withheld_net`
+  runs in the default sweep, because the `isolated` fixture is a deliberately small
+  40-payout dataset at a 500 k budget and costs ~15 s. The strongest assertion in the
+  project is not behind an opt-in.
+
+What moves to `slow` is the *measurements*: pinned tier counts, recall figures, the
+anchor census, the committed-board residue gap and ledger, the reproducibility
+check. Those need the board by definition.
+
+**And that is the risk this split creates, stated plainly:** a change that moves a
+measured count is now invisible to `pytest -q`. `CLAUDE.md` says to run `-m slow`
+before committing a stage and always after touching `matcher/`, `generator/` or
+`scoring/`, and `docs/build-stages.md` makes it a stage-14 gate — the regression
+exists to defend exactly those numbers, and a stage-14 run that shells `pytest -q`
+and sees green has checked the gates and the solver and none of the measurements.
+
+`regression.json` and the slow set answer different questions and stage 14 needs
+both: the regression measures **variance across ten seeds**, the slow set pins **the
+committed seed at the offline budget**. A change that moves seed 42 and nothing else
+passes the first and fails the second.
