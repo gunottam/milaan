@@ -224,11 +224,64 @@ function ExceptionRows({ rows, open, setOpen }) {
   )
 }
 
+// The refusals, with the reason that makes each one a refusal. §13's board reports
+// what closed; this reports what deliberately did not, and it is the stronger claim
+// of the two — `setl_0048` ties out against both credits to the paisa and **279
+// divisions of it balance against this one**, so any single answer is a false match
+// with probability 278/279. A recall point bought by picking one would read better
+// and mean less.
+//
+// Not behind a click, and not a row in the documentation table: a refusal whose
+// reason is one expand away is a refusal a reader records as a miss.
+export function Refused({ rows }) {
+  const pairs = Object.values(rows.reduce((acc, exc) => {
+    const key = exc.settlement_id ?? exc.bank_line_id
+    acc[key] = acc[key] ?? { settlement_id: exc.settlement_id, halves: [] }
+    acc[key].halves.push(exc)
+    return acc
+  }, {}))
+  return (
+    <>
+      <div className="sub-head">
+        <span className="eyebrow">
+          Refused — the pair ties out, the division is not recorded
+        </span>
+        <span className="eyebrow">{rows.length} halves</span>
+      </div>
+      {pairs.map((pair) => (
+        <div className="refused" key={pair.settlement_id ?? pair.halves[0].bank_line_id}>
+          <div className="refused-head">
+            <span className="eid">{pair.settlement_id ?? '—'}</span>
+            <span className="eid halves">
+              {pair.halves.map((h) => h.bank_line_id).join(' + ')}
+            </span>
+            <span className="num">
+              {pair.halves.map((h) => fmtInr(h.amount_at_risk_paise)).join(' + ')}
+            </span>
+            <span className="conf">SPLIT_PAYOUT · documentation</span>
+          </div>
+          {/* The census sentence, straight off the ledger record. It names the
+              settlement, the partner credit and how many sets of transactions
+              balance — counted exactly by `count_exact`, not stopped at the two
+              that already make it a refusal. */}
+          <div className="refused-why">{pair.halves[0].evidence[0]}</div>
+          <div className="blocked"><b>Blocked on:</b> {pair.halves[0].blocked_on}</div>
+        </div>
+      ))}
+    </>
+  )
+}
+
 function Open({ report }) {
   const [open, setOpen] = useState(null)
   const { ledger, deadline } = report
   const atRisk = ledger.exceptions.filter((e) => e.risk_class === 'at_risk')
   const docs = ledger.exceptions.filter((e) => e.risk_class === 'documentation')
+  // SPLIT_PAYOUT leaves the table and gets its own block above it. It still counts
+  // in the documentation total — the money is accounted for either way — but its
+  // reason is the finding and a table cell cannot hold it.
+  const splits = docs.filter((e) => e.exception_type === 'SPLIT_PAYOUT')
+  const docRows = docs.filter((e) => e.exception_type !== 'SPLIT_PAYOUT')
   const cut = deadline.cut.concat(deadline.exceeded)
 
   return (
@@ -279,10 +332,11 @@ function Open({ report }) {
           <ExceptionRows rows={atRisk} open={open} setOpen={setOpen} />
         </>
       )}
-      {docs.length > 0 && (
+      {splits.length > 0 && <Refused rows={splits} />}
+      {docRows.length > 0 && (
         <>
           <div className="sub-head"><span className="eyebrow">Needs documentation</span></div>
-          <ExceptionRows rows={docs} open={open} setOpen={setOpen} />
+          <ExceptionRows rows={docRows} open={open} setOpen={setOpen} />
         </>
       )}
       {ledger.exceptions.length === 0 && <p className="empty">Nothing open.</p>}

@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Board from './Board'
+import Regression from './Regression'
 import { fmtInr, pct } from './money'
 
 const POLL_MS = 500
@@ -196,6 +197,10 @@ export default function App() {
   const [form, setForm] = useState({ seed: 42, bank_lines: 120, records: 3000,
                                      noise: 'high', use_llm: false })
   const [run, setRun] = useState(null)
+  // `regression.json`, fetched once. A static artefact, so there is no reload and
+  // no poll: it is what the seed on screen is a sample of, and a 404 means the
+  // harness has not been run rather than that something failed.
+  const [regression, setRegression] = useState(null)
   const timer = useRef(null)
 
   const poll = useCallback(async (runId) => {
@@ -209,6 +214,13 @@ export default function App() {
   }, [])
 
   useEffect(() => () => clearInterval(timer.current), [])
+
+  useEffect(() => {
+    fetch('/api/regression')
+      .then((res) => (res.ok ? res.json() : null))
+      .then(setRegression)
+      .catch(() => setRegression(null))
+  }, [])
 
   async function start() {
     clearInterval(timer.current)
@@ -269,8 +281,14 @@ export default function App() {
           )}
           {run.report && <Summary run={run} report={run.report} />}
           {run.report && <Board report={run.report} />}
+          {/* Below the board, always. The single seed on screen is one draw; the
+              ten-seed spread is what says whether it was a lucky one. §11 keeps
+              the two apart because only one of them has a clock in it. */}
+          {regression && <Regression data={regression} />}
         </>
       )}
+
+      {!run && regression && <Regression data={regression} />}
 
       {!run && (
         <p className="empty">

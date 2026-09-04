@@ -423,10 +423,16 @@ def _type_open_line(line: BankLine, steps: Sequence[Mapping], deadline_cut: bool
                                 for s in step["anchors"]), None))
         draft.evidence.append(split.split(": ", 1)[-1])
         if alternatives:
+            # **Not a count of what balances.** The sentence above carries that,
+            # censused exactly by `count_exact`; this one says what the *search*
+            # did, and the two numbers differ by two orders of magnitude on
+            # `bl_0048` — 2 reached against 279 that balance. Printing the search's
+            # figure as though it were the census is how "the data does not
+            # determine this" gets read as "the solver gave up".
             draft.evidence.append(
-                f"{len(alternatives)} sets of the payout's transactions balance "
-                f"against this credit exactly; G5 withdrew approval rather than "
-                f"pick one")
+                f"G5 withdrew approval rather than pick one; the search reached "
+                f"{len(alternatives)} of them and stopped, because two is already "
+                f"a refusal")
         draft.evidence.append(
             "Nothing is unaccounted for — the pair contributes zero to the residue "
             "gap, because the payout sits on one side of §9.7's subtraction and "

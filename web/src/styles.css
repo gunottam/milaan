@@ -385,3 +385,59 @@ tr.row.fresh { animation: settle 160ms ease-out both; }
 }
 
 .empty { color: var(--ink-soft); padding: 18px 0; font-size: 13px; }
+
+/* --- the offline regression, and the refusals ---------------------------- */
+/* Static tables, both of them. Ruled rows and tabular figures, no colour except
+   on the one cell that must read zero (§11: a false match is the failure that
+   stops a stage) and on a breached ceiling. */
+
+.regression { margin-top: 28px; }
+.regression .note { color: var(--ink-soft); font-size: 13px; max-width: 62em;
+                    margin: 6px 0 12px; }
+.regression .mono { font-family: var(--mono); }
+
+table.reg { margin-bottom: 0; }
+table.reg th {
+  font-family: var(--sans); font-size: 11px; font-weight: 500;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft);
+  text-align: right; padding: 0 10px 6px 0; border-bottom: 1px solid var(--ink);
+  white-space: nowrap;
+}
+table.reg td {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  text-align: right; padding: 4px 10px 4px 0;
+  border-bottom: 1px solid var(--rule); white-space: nowrap;
+}
+table.reg tr.tint td { background: var(--bar); }
+table.reg td.break { color: var(--break); font-weight: 500; }
+
+table.reg.summary { margin-top: 0; }
+table.reg.summary td { border-bottom: none; }
+table.reg.summary td.slabel, table.reg.summary td.sname {
+  font-family: var(--sans); text-align: left; color: var(--ink-soft);
+}
+table.reg.summary td.slabel { width: 8em; color: var(--ink); font-weight: 500; }
+table.reg.summary td.sname { width: 14em; }
+table.reg.summary td.spread { font-weight: 500; }
+table.reg.summary td.range { color: var(--ink-soft); text-align: left;
+                             padding-left: 24px; }
+
+.reg-claims { list-style: none; padding: 0; margin: 10px 0 0; }
+.reg-claims li { font-size: 13px; color: var(--ink-soft); margin-bottom: 6px;
+                 max-width: 74em; }
+.reg-claims li.clean b { color: var(--tally); }
+.reg-claims li.broken b { color: var(--break); }
+
+/* One block per pair, not one row per half: the pair is the unit of meaning and
+   the reason is a sentence, which is why it is not in a table. */
+.refused { border-bottom: 1px solid var(--rule); padding: 8px 0; }
+.refused-head { display: flex; gap: 14px; align-items: baseline;
+                flex-wrap: wrap; }
+.refused-head .eid { font-family: var(--mono); }
+.refused-head .halves { color: var(--ink); }
+.refused-head .num { font-family: var(--mono);
+                     font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.refused-head .conf { font-size: 11px; letter-spacing: 0.12em;
+                      text-transform: uppercase; color: var(--hypo); }
+.refused-why { margin: 4px 0; max-width: 74em; }
+.refused .blocked { color: var(--ink-soft); font-size: 13px; }

@@ -1,0 +1,1627 @@
+{
+  "harness": {
+    "live": {
+      "ceiling_s": 60,
+      "deadline_ms": 22000,
+      "detective": true,
+      "note": "wall clock only. Its recall is not recorded: the demo budget sizes the buckets differently and the two denominators do not compare (\u00a710.1)",
+      "uniqueness_node_budget": 5000000
+    },
+    "offline": {
+      "deadline_ms": null,
+      "detective": false,
+      "note": "node budget only, no wall clock \u2014 reproducible (\u00a711, 8.6)",
+      "uniqueness_node_budget": 40000000
+    },
+    "scoring_rule": "per-line composition set equality (I5). Pair-scored SPLIT_PAYOUT measured at 1 TP -> 2 TP on seed 42 and DECLINED \u2014 it requires C3 to commit a division the source data does not determine (two identical refunds per pair), so it is a false match half the time by construction. See docs/build-stages.md stage 14 and docs/journal/stage-13.md.",
+    "seeds": [
+      42,
+      7,
+      99,
+      2026,
+      1,
+      5,
+      13,
+      23,
+      101,
+      777
+    ]
+  },
+  "live": [
+    {
+      "audit_score_s": 0.01,
+      "bank_lines": 134,
+      "closed": 100,
+      "closed_ablated": 100,
+      "deadline_hit": true,
+      "deadline_hit_ablated": true,
+      "deadline_ms": 22000,
+      "detective_calls": 11,
+      "detective_cost_paise": 54,
+      "detective_ran": true,
+      "generate_s": 9.69,
+      "match_ablated_s": 7.91,
+      "match_s": 48.38,
+      "seed": 42,
+      "total_ablated_s": 17.61,
+      "total_s": 58.08
+    },
+    {
+      "audit_score_s": 0.02,
+      "bank_lines": 134,
+      "closed": 103,
+      "closed_ablated": 103,
+      "deadline_hit": true,
+      "deadline_hit_ablated": true,
+      "deadline_ms": 22000,
+      "detective_calls": 9,
+      "detective_cost_paise": 39,
+      "detective_ran": true,
+      "generate_s": 11.37,
+      "match_ablated_s": 6.68,
+      "match_s": 56.01,
+      "seed": 7,
+      "total_ablated_s": 18.06,
+      "total_s": 67.4
+    },
+    {
+      "audit_score_s": 0.02,
+      "bank_lines": 134,
+      "closed": 101,
+      "closed_ablated": 101,
+      "deadline_hit": true,
+      "deadline_hit_ablated": true,
+      "deadline_ms": 22000,
+      "detective_calls": 9,
+      "detective_cost_paise": 92,
+      "detective_ran": true,
+      "generate_s": 9.95,
+      "match_ablated_s": 7.77,
+      "match_s": 70.75,
+      "seed": 99,
+      "total_ablated_s": 17.74,
+      "total_s": 80.71
+    },
+    {
+      "audit_score_s": 0.02,
+      "bank_lines": 134,
+      "closed": 105,
+      "closed_ablated": 105,
+      "deadline_hit": true,
+      "deadline_hit_ablated": true,
+      "deadline_ms": 22000,
+      "detective_calls": 16,
+      "detective_cost_paise": 25,
+      "detective_ran": true,
+      "generate_s": 11.34,
+      "match_ablated_s": 4.92,
+      "match_s": 47.89,
+      "seed": 2026,
+      "total_ablated_s": 16.27,
+      "total_s": 59.25
+    },
+    {
+      "audit_score_s": 0.01,
+      "bank_lines": 134,
+      "closed": 101,
+      "closed_ablated": 101,
+      "deadline_hit": true,
+      "deadline_hit_ablated": true,
+      "deadline_ms": 22000,
+      "detective_calls": 2,
+      "detective_cost_paise": 28,
+      "detective_ran": true,
+      "generate_s": 11.18,
+      "match_ablated_s": 13.01,
+      "match_s": 22.66,
+      "seed": 1,
+      "total_ablated_s": 24.2,
+      "total_s": 33.84
+    },
+    {
+      "audit_score_s": 0.01,
+      "bank_lines": 134,
+      "closed": 103,
+      "closed_ablated": 103,
+      "deadline_hit": true,
+      "deadline_hit_ablated": true,
+      "deadline_ms": 22000,
+      "detective_calls": 9,
+      "detective_cost_paise": 59,
+      "detective_ran": true,
+      "generate_s": 13.11,
+      "match_ablated_s": 9.25,
+      "match_s": 25.1,
+      "seed": 5,
+      "total_ablated_s": 22.38,
+      "total_s": 38.23
+    },
+    {
+      "audit_score_s": 0.02,
+      "bank_lines": 134,
+      "closed": 104,
+      "closed_ablated": 104,
+      "deadline_hit": true,
+      "deadline_hit_ablated": true,
+      "deadline_ms": 22000,
+      "detective_calls": 16,
+      "detective_cost_paise": 0,
+      "detective_ran": true,
+      "generate_s": 11.91,
+      "match_ablated_s": 5.79,
+      "match_s": 7.18,
+      "seed": 13,
+      "total_ablated_s": 17.72,
+      "total_s": 19.11
+    },
+    {
+      "audit_score_s": 0.01,
+      "bank_lines": 134,
+      "closed": 99,
+      "closed_ablated": 99,
+      "deadline_hit": true,
+      "deadline_hit_ablated": true,
+      "deadline_ms": 22000,
+      "detective_calls": 18,
+      "detective_cost_paise": 0,
+      "detective_ran": true,
+      "generate_s": 10.97,
+      "match_ablated_s": 8.68,
+      "match_s": 10.31,
+      "seed": 23,
+      "total_ablated_s": 19.66,
+      "total_s": 21.29
+    },
+    {
+      "audit_score_s": 0.02,
+      "bank_lines": 134,
+      "closed": 108,
+      "closed_ablated": 108,
+      "deadline_hit": true,
+      "deadline_hit_ablated": true,
+      "deadline_ms": 22000,
+      "detective_calls": 16,
+      "detective_cost_paise": 0,
+      "detective_ran": true,
+      "generate_s": 9.84,
+      "match_ablated_s": 6.5,
+      "match_s": 7.8,
+      "seed": 101,
+      "total_ablated_s": 16.35,
+      "total_s": 17.66
+    },
+    {
+      "audit_score_s": 0.02,
+      "bank_lines": 134,
+      "closed": 103,
+      "closed_ablated": 103,
+      "deadline_hit": true,
+      "deadline_hit_ablated": false,
+      "deadline_ms": 22000,
+      "detective_calls": 18,
+      "detective_cost_paise": 0,
+      "detective_ran": true,
+      "generate_s": 7.05,
+      "match_ablated_s": 5.4,
+      "match_s": 7.92,
+      "seed": 777,
+      "total_ablated_s": 12.46,
+      "total_s": 14.99
+    }
+  ],
+  "seeds": [
+    {
+      "all_lines": {
+        "counts": {
+          "FN": 5,
+          "TN": 29,
+          "TP": 100
+        },
+        "n": 134,
+        "precision": 1.0,
+        "recall": 0.9523809523809523
+      },
+      "ambiguity": {
+        "lines": 16,
+        "of": 134,
+        "rate": 0.11940298507462686
+      },
+      "anchors": {
+        "no_true_anchor": 24,
+        "recovered": 101,
+        "true_anchor_present": 77,
+        "wrong": 0
+      },
+      "bank_lines": 134,
+      "buckets": {
+        "by_construction_c3": {
+          "FN": 5,
+          "TP": 1
+        },
+        "by_construction_single": {
+          "TP": 4
+        },
+        "emergent": {
+          "TN": 16
+        },
+        "headline": {
+          "TN": 13,
+          "TP": 92
+        },
+        "unproven": {
+          "TP": 3
+        }
+      },
+      "by_tier": {
+        "A1": 40,
+        "A3": 7,
+        "B1": 13,
+        "B2": 4,
+        "C1": 28,
+        "C2": 7,
+        "C3": 1
+      },
+      "closed": 100,
+      "false_matches": [],
+      "headline": {
+        "counts": {
+          "TN": 13,
+          "TP": 92
+        },
+        "n": 105,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "ledger": {
+        "at_risk_paise": 90571527,
+        "by_type": {
+          "AMBIGUOUS_CONSEQUENTIAL": 11,
+          "AMBIGUOUS_EQUIVALENT": 4,
+          "DUPLICATE_CREDIT": 6,
+          "ORPHAN_ORDER": 6,
+          "SETTLEMENT_CONTAMINATION": 3,
+          "SPLIT_PAYOUT": 5,
+          "UNIQUENESS_UNPROVEN": 1,
+          "WITHHELD_RECORD": 7
+        },
+        "documentation_paise": 83097979
+      },
+      "open": 34,
+      "propagation_passes_run": 2,
+      "residue_gap_paise": 199126,
+      "residue_reconciles": false,
+      "run": "data/runs/seed42",
+      "seed": 42,
+      "split_refusals": [
+        {
+          "amount_paise": 4445390,
+          "bank_line_id": "bl_0048",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0048 ties to this credit and bl_9003 jointly to the paisa, but 279 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0048"
+        },
+        {
+          "amount_paise": 4337770,
+          "bank_line_id": "bl_9003",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0048 ties to this credit and bl_0048 jointly to the paisa, but 279 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0048"
+        },
+        {
+          "amount_paise": 3921398,
+          "bank_line_id": "bl_0019",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0019 ties to this credit and bl_9002 jointly to the paisa, but 2 payouts of it tie out that way, dividing 6 and 6 ways, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0019"
+        },
+        {
+          "amount_paise": 2805522,
+          "bank_line_id": "bl_9002",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0019 ties to this credit and bl_0019 jointly to the paisa, but 2 payouts of it tie out that way, dividing 6 and 6 ways, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0019"
+        },
+        {
+          "amount_paise": 780007,
+          "bank_line_id": "bl_9001",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0101 ties to this credit and bl_0101 jointly to the paisa, but 2 payouts of it tie out that way, dividing 1 and 1 ways, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0101"
+        }
+      ],
+      "transactions": 3009,
+      "uniqueness_node_budget": 40000000
+    },
+    {
+      "all_lines": {
+        "counts": {
+          "FN": 11,
+          "FP": 1,
+          "TN": 20,
+          "TP": 102
+        },
+        "n": 134,
+        "precision": 0.9902912621359223,
+        "recall": 0.9026548672566371
+      },
+      "ambiguity": {
+        "lines": 8,
+        "of": 134,
+        "rate": 0.05970149253731343
+      },
+      "anchors": {
+        "no_true_anchor": 18,
+        "recovered": 92,
+        "true_anchor_present": 74,
+        "wrong": 0
+      },
+      "bank_lines": 134,
+      "buckets": {
+        "by_construction_c3": {
+          "FN": 6
+        },
+        "by_construction_single": {
+          "TP": 4
+        },
+        "emergent": {
+          "TN": 8
+        },
+        "headline": {
+          "FN": 5,
+          "FP": 1,
+          "TN": 12,
+          "TP": 96
+        },
+        "unproven": {
+          "TP": 2
+        }
+      },
+      "by_tier": {
+        "A1": 40,
+        "A3": 7,
+        "B1": 17,
+        "B2": 4,
+        "C1": 26,
+        "C2": 9
+      },
+      "closed": 103,
+      "false_matches": [
+        {
+          "bank_line_id": "bl_9004",
+          "bucket": "headline",
+          "confidence": "exact",
+          "delta_paise": 0,
+          "injected_breaks": [
+            "DUPLICATE_CREDIT"
+          ],
+          "tier": "A1",
+          "truth_resolvable": false
+        }
+      ],
+      "headline": {
+        "counts": {
+          "FN": 5,
+          "FP": 1,
+          "TN": 12,
+          "TP": 96
+        },
+        "n": 114,
+        "precision": 0.9896907216494846,
+        "recall": 0.9504950495049505
+      },
+      "ledger": {
+        "at_risk_paise": 64042877,
+        "by_type": {
+          "AMBIGUOUS_CONSEQUENTIAL": 4,
+          "AMBIGUOUS_EQUIVALENT": 4,
+          "DUPLICATE_CREDIT": 4,
+          "ORPHAN_ORDER": 6,
+          "SETTLEMENT_CONTAMINATION": 3,
+          "SPLIT_PAYOUT": 9,
+          "UNIQUENESS_UNPROVEN": 3,
+          "WITHHELD_RECORD": 7
+        },
+        "documentation_paise": 74324092
+      },
+      "open": 31,
+      "propagation_passes_run": 2,
+      "residue_gap_paise": 989137,
+      "residue_reconciles": false,
+      "run": "data/regression/seed7",
+      "seed": 7,
+      "split_refusals": [
+        {
+          "amount_paise": 6203062,
+          "bank_line_id": "bl_0099",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0099 ties to this credit and bl_9002 jointly across 29 transactions, but the division search exhausted the 250000 node budget (250001 nodes over a pool of 29)",
+          "settlement_id": null
+        },
+        {
+          "amount_paise": 6027148,
+          "bank_line_id": "bl_9002",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0099 ties to this credit and bl_0099 jointly across 29 transactions, but the division search exhausted the 250000 node budget (250001 nodes over a pool of 29)",
+          "settlement_id": null
+        },
+        {
+          "amount_paise": 5851903,
+          "bank_line_id": "bl_0064",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0087 ties to this credit and bl_9009 jointly to the paisa, but 82 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0087"
+        },
+        {
+          "amount_paise": 4763430,
+          "bank_line_id": "bl_0036",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0036 ties to this credit and bl_9001 jointly to the paisa, but 274 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0036"
+        },
+        {
+          "amount_paise": 3652573,
+          "bank_line_id": "bl_0106",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0087 ties to this credit and bl_9005 jointly to the paisa, but 105 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0087"
+        },
+        {
+          "amount_paise": 3652573,
+          "bank_line_id": "bl_9005",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0087 ties to this credit and bl_0106 jointly to the paisa, but 105 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0087"
+        },
+        {
+          "amount_paise": 3301418,
+          "bank_line_id": "bl_9001",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0036 ties to this credit and bl_0036 jointly to the paisa, but 274 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0036"
+        },
+        {
+          "amount_paise": 2280285,
+          "bank_line_id": "bl_0068",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0068 ties to this credit and bl_9003 jointly to the paisa, but 7 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0068"
+        },
+        {
+          "amount_paise": 1920284,
+          "bank_line_id": "bl_9003",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0068 ties to this credit and bl_0068 jointly to the paisa, but 7 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0068"
+        }
+      ],
+      "transactions": 3009,
+      "uniqueness_node_budget": 40000000
+    },
+    {
+      "all_lines": {
+        "counts": {
+          "FN": 7,
+          "TN": 26,
+          "TP": 101
+        },
+        "n": 134,
+        "precision": 1.0,
+        "recall": 0.9351851851851852
+      },
+      "ambiguity": {
+        "lines": 13,
+        "of": 134,
+        "rate": 0.09701492537313433
+      },
+      "anchors": {
+        "no_true_anchor": 20,
+        "recovered": 101,
+        "true_anchor_present": 81,
+        "wrong": 0
+      },
+      "bank_lines": 134,
+      "buckets": {
+        "by_construction_c3": {
+          "FN": 6
+        },
+        "by_construction_single": {
+          "TP": 4
+        },
+        "emergent": {
+          "TN": 13
+        },
+        "headline": {
+          "FN": 1,
+          "TN": 13,
+          "TP": 97
+        }
+      },
+      "by_tier": {
+        "A1": 44,
+        "A3": 9,
+        "B1": 8,
+        "B2": 4,
+        "C1": 25,
+        "C2": 11
+      },
+      "closed": 101,
+      "false_matches": [],
+      "headline": {
+        "counts": {
+          "FN": 1,
+          "TN": 13,
+          "TP": 97
+        },
+        "n": 111,
+        "precision": 1.0,
+        "recall": 0.9897959183673469
+      },
+      "ledger": {
+        "at_risk_paise": 56723918,
+        "by_type": {
+          "AMBIGUOUS_CONSEQUENTIAL": 4,
+          "AMBIGUOUS_EQUIVALENT": 8,
+          "DUPLICATE_CREDIT": 6,
+          "ORPHAN_ORDER": 6,
+          "SETTLEMENT_CONTAMINATION": 3,
+          "SPLIT_PAYOUT": 7,
+          "UNIQUENESS_UNPROVEN": 6,
+          "WITHHELD_RECORD": 2
+        },
+        "documentation_paise": 101292259
+      },
+      "open": 33,
+      "propagation_passes_run": 2,
+      "residue_gap_paise": 856694,
+      "residue_reconciles": false,
+      "run": "data/regression/seed99",
+      "seed": 99,
+      "split_refusals": [
+        {
+          "amount_paise": 4238782,
+          "bank_line_id": "bl_0065",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0065 ties to this credit and bl_9001 jointly to the paisa, but 313 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0065"
+        },
+        {
+          "amount_paise": 4130000,
+          "bank_line_id": "bl_0041",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "2 settlements (setl_0085, setl_0106) tie to this credit and bl_9007 jointly to the paisa, but setl_0085 divides 42 ways, setl_0106 divides 130 and 130 ways, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0085"
+        },
+        {
+          "amount_paise": 4055647,
+          "bank_line_id": "bl_0029",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0029 ties to this credit and bl_9002 jointly to the paisa, but 80 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0029"
+        },
+        {
+          "amount_paise": 3856184,
+          "bank_line_id": "bl_0014",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0014 ties to this credit and bl_9003 jointly across 25 transactions, but the division search exhausted the 250000 node budget (250001 nodes over a pool of 25)",
+          "settlement_id": null
+        },
+        {
+          "amount_paise": 3702372,
+          "bank_line_id": "bl_9003",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0014 ties to this credit and bl_0014 jointly across 25 transactions, but the division search exhausted the 250000 node budget (250001 nodes over a pool of 25)",
+          "settlement_id": null
+        },
+        {
+          "amount_paise": 3694906,
+          "bank_line_id": "bl_9001",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0065 ties to this credit and bl_0065 jointly to the paisa, but 313 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0065"
+        },
+        {
+          "amount_paise": 3376280,
+          "bank_line_id": "bl_9002",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0029 ties to this credit and bl_0029 jointly to the paisa, but 80 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0029"
+        }
+      ],
+      "transactions": 3009,
+      "uniqueness_node_budget": 40000000
+    },
+    {
+      "all_lines": {
+        "counts": {
+          "FN": 9,
+          "TN": 20,
+          "TP": 105
+        },
+        "n": 134,
+        "precision": 1.0,
+        "recall": 0.9210526315789473
+      },
+      "ambiguity": {
+        "lines": 7,
+        "of": 134,
+        "rate": 0.05223880597014925
+      },
+      "anchors": {
+        "no_true_anchor": 11,
+        "recovered": 93,
+        "true_anchor_present": 82,
+        "wrong": 0
+      },
+      "bank_lines": 134,
+      "buckets": {
+        "by_construction_c3": {
+          "FN": 6
+        },
+        "by_construction_single": {
+          "TP": 4
+        },
+        "emergent": {
+          "TN": 7
+        },
+        "headline": {
+          "FN": 3,
+          "TN": 13,
+          "TP": 100
+        },
+        "unproven": {
+          "TP": 1
+        }
+      },
+      "by_tier": {
+        "A1": 37,
+        "A3": 9,
+        "B1": 14,
+        "B2": 4,
+        "C1": 31,
+        "C2": 10
+      },
+      "closed": 105,
+      "false_matches": [],
+      "headline": {
+        "counts": {
+          "FN": 3,
+          "TN": 13,
+          "TP": 100
+        },
+        "n": 116,
+        "precision": 1.0,
+        "recall": 0.970873786407767
+      },
+      "ledger": {
+        "at_risk_paise": 83657645,
+        "by_type": {
+          "AMBIGUOUS_CONSEQUENTIAL": 5,
+          "AMBIGUOUS_EQUIVALENT": 2,
+          "DUPLICATE_CREDIT": 6,
+          "ORPHAN_ORDER": 6,
+          "SETTLEMENT_CONTAMINATION": 2,
+          "SPLIT_PAYOUT": 6,
+          "UNIQUENESS_UNPROVEN": 5,
+          "WITHHELD_RECORD": 5
+        },
+        "documentation_paise": 68784664
+      },
+      "open": 29,
+      "propagation_passes_run": 2,
+      "residue_gap_paise": 1163505,
+      "residue_reconciles": false,
+      "run": "data/regression/seed2026",
+      "seed": 2026,
+      "split_refusals": [
+        {
+          "amount_paise": 4544695,
+          "bank_line_id": "bl_0100",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0100 ties to this credit and bl_9001 jointly to the paisa, but 80 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0100"
+        },
+        {
+          "amount_paise": 4169747,
+          "bank_line_id": "bl_0072",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0072 ties to this credit and bl_9002 jointly to the paisa, but 45 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0072"
+        },
+        {
+          "amount_paise": 4030077,
+          "bank_line_id": "bl_9002",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0072 ties to this credit and bl_0072 jointly to the paisa, but 45 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0072"
+        },
+        {
+          "amount_paise": 3916167,
+          "bank_line_id": "bl_9001",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0100 ties to this credit and bl_0100 jointly to the paisa, but 80 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0100"
+        },
+        {
+          "amount_paise": 3092078,
+          "bank_line_id": "bl_0050",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0050 ties to this credit and bl_9003 jointly to the paisa, but 118 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0050"
+        },
+        {
+          "amount_paise": 2817917,
+          "bank_line_id": "bl_9003",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0050 ties to this credit and bl_0050 jointly to the paisa, but 118 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0050"
+        }
+      ],
+      "transactions": 3009,
+      "uniqueness_node_budget": 40000000
+    },
+    {
+      "all_lines": {
+        "counts": {
+          "FN": 6,
+          "TN": 25,
+          "TP": 103
+        },
+        "n": 134,
+        "precision": 1.0,
+        "recall": 0.944954128440367
+      },
+      "ambiguity": {
+        "lines": 12,
+        "of": 134,
+        "rate": 0.08955223880597014
+      },
+      "anchors": {
+        "no_true_anchor": 21,
+        "recovered": 101,
+        "true_anchor_present": 80,
+        "wrong": 0
+      },
+      "bank_lines": 134,
+      "buckets": {
+        "by_construction_c3": {
+          "FN": 6
+        },
+        "by_construction_single": {
+          "TP": 4
+        },
+        "emergent": {
+          "TN": 12
+        },
+        "headline": {
+          "TN": 13,
+          "TP": 98
+        },
+        "unproven": {
+          "TP": 1
+        }
+      },
+      "by_tier": {
+        "A1": 32,
+        "A3": 11,
+        "B1": 13,
+        "B2": 4,
+        "C1": 32,
+        "C2": 11
+      },
+      "closed": 103,
+      "false_matches": [],
+      "headline": {
+        "counts": {
+          "TN": 13,
+          "TP": 98
+        },
+        "n": 111,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "ledger": {
+        "at_risk_paise": 65435878,
+        "by_type": {
+          "AMBIGUOUS_CONSEQUENTIAL": 8,
+          "AMBIGUOUS_EQUIVALENT": 4,
+          "DUPLICATE_CREDIT": 6,
+          "ORPHAN_ORDER": 6,
+          "SETTLEMENT_CONTAMINATION": 2,
+          "SPLIT_PAYOUT": 6,
+          "UNIQUENESS_UNPROVEN": 2,
+          "WITHHELD_RECORD": 5
+        },
+        "documentation_paise": 71059981
+      },
+      "open": 31,
+      "propagation_passes_run": 2,
+      "residue_gap_paise": 2604624,
+      "residue_reconciles": false,
+      "run": "data/regression/seed1",
+      "seed": 1,
+      "split_refusals": [
+        {
+          "amount_paise": 5691927,
+          "bank_line_id": "bl_0047",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0047 ties to this credit and bl_9003 jointly to the paisa, but 338 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0047"
+        },
+        {
+          "amount_paise": 4801218,
+          "bank_line_id": "bl_9003",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0047 ties to this credit and bl_0047 jointly to the paisa, but 338 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0047"
+        },
+        {
+          "amount_paise": 4369612,
+          "bank_line_id": "bl_0042",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0042 ties to this credit and bl_9002 jointly to the paisa, but 390 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0042"
+        },
+        {
+          "amount_paise": 3737831,
+          "bank_line_id": "bl_9002",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0042 ties to this credit and bl_0042 jointly to the paisa, but 390 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0042"
+        },
+        {
+          "amount_paise": 2261170,
+          "bank_line_id": "bl_0084",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0084 ties to this credit and bl_9001 jointly to the paisa, but 7 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0084"
+        },
+        {
+          "amount_paise": 2190988,
+          "bank_line_id": "bl_9001",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0084 ties to this credit and bl_0084 jointly to the paisa, but 7 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0084"
+        }
+      ],
+      "transactions": 3009,
+      "uniqueness_node_budget": 40000000
+    },
+    {
+      "all_lines": {
+        "counts": {
+          "FN": 9,
+          "TN": 22,
+          "TP": 103
+        },
+        "n": 134,
+        "precision": 1.0,
+        "recall": 0.9196428571428571
+      },
+      "ambiguity": {
+        "lines": 9,
+        "of": 134,
+        "rate": 0.06716417910447761
+      },
+      "anchors": {
+        "no_true_anchor": 19,
+        "recovered": 98,
+        "true_anchor_present": 79,
+        "wrong": 0
+      },
+      "bank_lines": 134,
+      "buckets": {
+        "by_construction_c3": {
+          "FN": 4,
+          "TP": 2
+        },
+        "by_construction_single": {
+          "TP": 4
+        },
+        "emergent": {
+          "TN": 9
+        },
+        "headline": {
+          "FN": 4,
+          "TN": 13,
+          "TP": 96
+        },
+        "unproven": {
+          "FN": 1,
+          "TP": 1
+        }
+      },
+      "by_tier": {
+        "A1": 29,
+        "A3": 9,
+        "B1": 10,
+        "B2": 4,
+        "C1": 38,
+        "C2": 11,
+        "C3": 2
+      },
+      "closed": 103,
+      "false_matches": [],
+      "headline": {
+        "counts": {
+          "FN": 4,
+          "TN": 13,
+          "TP": 96
+        },
+        "n": 113,
+        "precision": 1.0,
+        "recall": 0.96
+      },
+      "ledger": {
+        "at_risk_paise": 95077040,
+        "by_type": {
+          "AMBIGUOUS_CONSEQUENTIAL": 5,
+          "AMBIGUOUS_EQUIVALENT": 4,
+          "DUPLICATE_CREDIT": 6,
+          "ORPHAN_ORDER": 6,
+          "SETTLEMENT_CONTAMINATION": 4,
+          "SPLIT_PAYOUT": 5,
+          "UNIQUENESS_UNPROVEN": 7,
+          "WITHHELD_RECORD": 4
+        },
+        "documentation_paise": 69507655
+      },
+      "open": 31,
+      "propagation_passes_run": 2,
+      "residue_gap_paise": 1320707,
+      "residue_reconciles": false,
+      "run": "data/regression/seed5",
+      "seed": 5,
+      "split_refusals": [
+        {
+          "amount_paise": 2480399,
+          "bank_line_id": "bl_0091",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0091 ties to this credit and bl_9003 jointly to the paisa, but 354 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0091"
+        },
+        {
+          "amount_paise": 2472926,
+          "bank_line_id": "bl_9003",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0091 ties to this credit and bl_0091 jointly to the paisa, but 354 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0091"
+        },
+        {
+          "amount_paise": 2169035,
+          "bank_line_id": "bl_0094",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0094 ties to this credit and bl_9001 jointly across 26 transactions, but the division search exhausted the 250000 node budget (250001 nodes over a pool of 26)",
+          "settlement_id": null
+        },
+        {
+          "amount_paise": 2020992,
+          "bank_line_id": "bl_9001",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0094 ties to this credit and bl_0094 jointly across 26 transactions, but the division search exhausted the 250000 node budget (250001 nodes over a pool of 26)",
+          "settlement_id": null
+        },
+        {
+          "amount_paise": 1980574,
+          "bank_line_id": "bl_0088",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0080 ties to this credit and bl_9005 jointly to the paisa, but 134 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0080"
+        }
+      ],
+      "transactions": 3009,
+      "uniqueness_node_budget": 40000000
+    },
+    {
+      "all_lines": {
+        "counts": {
+          "FN": 8,
+          "FP": 1,
+          "TN": 22,
+          "TP": 103
+        },
+        "n": 134,
+        "precision": 0.9903846153846154,
+        "recall": 0.9279279279279279
+      },
+      "ambiguity": {
+        "lines": 10,
+        "of": 134,
+        "rate": 0.07462686567164178
+      },
+      "anchors": {
+        "no_true_anchor": 15,
+        "recovered": 99,
+        "true_anchor_present": 84,
+        "wrong": 0
+      },
+      "bank_lines": 134,
+      "buckets": {
+        "by_construction_c3": {
+          "FN": 6
+        },
+        "by_construction_single": {
+          "TP": 4
+        },
+        "emergent": {
+          "TN": 10
+        },
+        "headline": {
+          "FN": 2,
+          "FP": 1,
+          "TN": 12,
+          "TP": 98
+        },
+        "unproven": {
+          "TP": 1
+        }
+      },
+      "by_tier": {
+        "A1": 32,
+        "A3": 9,
+        "B1": 9,
+        "B2": 3,
+        "C1": 39,
+        "C2": 12
+      },
+      "closed": 104,
+      "false_matches": [
+        {
+          "bank_line_id": "bl_9008",
+          "bucket": "headline",
+          "confidence": "exact",
+          "delta_paise": 0,
+          "injected_breaks": [
+            "DUPLICATE_CREDIT"
+          ],
+          "tier": "C1",
+          "truth_resolvable": false
+        }
+      ],
+      "headline": {
+        "counts": {
+          "FN": 2,
+          "FP": 1,
+          "TN": 12,
+          "TP": 98
+        },
+        "n": 113,
+        "precision": 0.98989898989899,
+        "recall": 0.98
+      },
+      "ledger": {
+        "at_risk_paise": 97218224,
+        "by_type": {
+          "AMBIGUOUS_CONSEQUENTIAL": 6,
+          "AMBIGUOUS_EQUIVALENT": 3,
+          "DUPLICATE_CREDIT": 4,
+          "ORPHAN_ORDER": 6,
+          "SETTLEMENT_CONTAMINATION": 3,
+          "SPLIT_PAYOUT": 8,
+          "UNIQUENESS_UNPROVEN": 2,
+          "WITHHELD_RECORD": 7
+        },
+        "documentation_paise": 44747015
+      },
+      "open": 30,
+      "propagation_passes_run": 2,
+      "residue_gap_paise": 1421529,
+      "residue_reconciles": false,
+      "run": "data/regression/seed13",
+      "seed": 13,
+      "split_refusals": [
+        {
+          "amount_paise": 3858744,
+          "bank_line_id": "bl_0050",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0050 ties to this credit and bl_9001 jointly to the paisa, but 79 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0050"
+        },
+        {
+          "amount_paise": 3493595,
+          "bank_line_id": "bl_9001",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0050 ties to this credit and bl_0050 jointly to the paisa, but 79 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0050"
+        },
+        {
+          "amount_paise": 2602654,
+          "bank_line_id": "bl_0053",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0053 ties to this credit and bl_9003 jointly to the paisa, but 70 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0053"
+        },
+        {
+          "amount_paise": 1742517,
+          "bank_line_id": "bl_0078",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0078 ties to this credit and bl_9002 jointly to the paisa, but 79 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0078"
+        },
+        {
+          "amount_paise": 1713783,
+          "bank_line_id": "bl_9003",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0053 ties to this credit and bl_0053 jointly to the paisa, but 70 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0053"
+        },
+        {
+          "amount_paise": 1578551,
+          "bank_line_id": "bl_9002",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0078 ties to this credit and bl_0078 jointly to the paisa, but 79 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0078"
+        },
+        {
+          "amount_paise": 606050,
+          "bank_line_id": "bl_0118",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "2 settlements (setl_0069, setl_0072) tie to this credit and bl_9009 jointly to the paisa, but setl_0069 divides 10 ways, setl_0072 divides 26 ways, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0069"
+        },
+        {
+          "amount_paise": 606050,
+          "bank_line_id": "bl_9009",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "2 settlements (setl_0069, setl_0072) tie to this credit and bl_0118 jointly to the paisa, but setl_0069 divides 10 ways, setl_0072 divides 26 ways, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0069"
+        }
+      ],
+      "transactions": 3009,
+      "uniqueness_node_budget": 40000000
+    },
+    {
+      "all_lines": {
+        "counts": {
+          "FN": 10,
+          "TN": 25,
+          "TP": 99
+        },
+        "n": 134,
+        "precision": 1.0,
+        "recall": 0.908256880733945
+      },
+      "ambiguity": {
+        "lines": 12,
+        "of": 134,
+        "rate": 0.08955223880597014
+      },
+      "anchors": {
+        "no_true_anchor": 23,
+        "recovered": 97,
+        "true_anchor_present": 74,
+        "wrong": 0
+      },
+      "bank_lines": 134,
+      "buckets": {
+        "by_construction_c3": {
+          "FN": 5,
+          "TP": 1
+        },
+        "by_construction_single": {
+          "TP": 4
+        },
+        "emergent": {
+          "TN": 12
+        },
+        "headline": {
+          "FN": 5,
+          "TN": 13,
+          "TP": 93
+        },
+        "unproven": {
+          "TP": 1
+        }
+      },
+      "by_tier": {
+        "A1": 31,
+        "A3": 7,
+        "B1": 17,
+        "B2": 4,
+        "C1": 33,
+        "C2": 6,
+        "C3": 1
+      },
+      "closed": 99,
+      "false_matches": [],
+      "headline": {
+        "counts": {
+          "FN": 5,
+          "TN": 13,
+          "TP": 93
+        },
+        "n": 111,
+        "precision": 1.0,
+        "recall": 0.9489795918367347
+      },
+      "ledger": {
+        "at_risk_paise": 111411580,
+        "by_type": {
+          "AMBIGUOUS_CONSEQUENTIAL": 11,
+          "DUPLICATE_CREDIT": 6,
+          "ORPHAN_ORDER": 6,
+          "SETTLEMENT_CONTAMINATION": 3,
+          "SPLIT_PAYOUT": 5,
+          "UNIQUENESS_UNPROVEN": 6,
+          "WITHHELD_RECORD": 7
+        },
+        "documentation_paise": 62926886
+      },
+      "open": 35,
+      "propagation_passes_run": 2,
+      "residue_gap_paise": 2297895,
+      "residue_reconciles": false,
+      "run": "data/regression/seed23",
+      "seed": 23,
+      "split_refusals": [
+        {
+          "amount_paise": 6396583,
+          "bank_line_id": "bl_0024",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0024 ties to this credit and bl_9003 jointly to the paisa, but 107 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0024"
+        },
+        {
+          "amount_paise": 4565909,
+          "bank_line_id": "bl_9003",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0024 ties to this credit and bl_0024 jointly to the paisa, but 107 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0024"
+        },
+        {
+          "amount_paise": 2604270,
+          "bank_line_id": "bl_0104",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0104 ties to this credit and bl_9002 jointly to the paisa, but 466 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0104"
+        },
+        {
+          "amount_paise": 2196353,
+          "bank_line_id": "bl_9002",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0104 ties to this credit and bl_0104 jointly to the paisa, but 466 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0104"
+        },
+        {
+          "amount_paise": 1157758,
+          "bank_line_id": "bl_9001",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0048 ties to this credit and bl_0048 jointly to the paisa, but 2 payouts of it tie out that way, dividing 1 and 1 ways, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0048"
+        }
+      ],
+      "transactions": 3009,
+      "uniqueness_node_budget": 40000000
+    },
+    {
+      "all_lines": {
+        "counts": {
+          "FN": 11,
+          "FP": 1,
+          "TN": 15,
+          "TP": 107
+        },
+        "n": 134,
+        "precision": 0.9907407407407407,
+        "recall": 0.9067796610169492
+      },
+      "ambiguity": {
+        "lines": 3,
+        "of": 134,
+        "rate": 0.022388059701492536
+      },
+      "anchors": {
+        "no_true_anchor": 11,
+        "recovered": 89,
+        "true_anchor_present": 78,
+        "wrong": 0
+      },
+      "bank_lines": 134,
+      "buckets": {
+        "by_construction_c3": {
+          "FN": 6
+        },
+        "by_construction_single": {
+          "TP": 4
+        },
+        "emergent": {
+          "TN": 3
+        },
+        "headline": {
+          "FN": 5,
+          "FP": 1,
+          "TN": 12,
+          "TP": 103
+        }
+      },
+      "by_tier": {
+        "A1": 26,
+        "A3": 6,
+        "B1": 17,
+        "B2": 4,
+        "C1": 42,
+        "C2": 13
+      },
+      "closed": 108,
+      "false_matches": [
+        {
+          "bank_line_id": "bl_9004",
+          "bucket": "headline",
+          "confidence": "exact",
+          "delta_paise": 0,
+          "injected_breaks": [
+            "DUPLICATE_CREDIT"
+          ],
+          "tier": "C1",
+          "truth_resolvable": false
+        }
+      ],
+      "headline": {
+        "counts": {
+          "FN": 5,
+          "FP": 1,
+          "TN": 12,
+          "TP": 103
+        },
+        "n": 121,
+        "precision": 0.9903846153846154,
+        "recall": 0.9537037037037037
+      },
+      "ledger": {
+        "at_risk_paise": 75087527,
+        "by_type": {
+          "AMBIGUOUS_CONSEQUENTIAL": 1,
+          "AMBIGUOUS_EQUIVALENT": 1,
+          "DUPLICATE_CREDIT": 4,
+          "ORPHAN_ORDER": 6,
+          "SETTLEMENT_CONTAMINATION": 3,
+          "SPLIT_PAYOUT": 8,
+          "UNIQUENESS_UNPROVEN": 5,
+          "WITHHELD_RECORD": 7
+        },
+        "documentation_paise": 71092921
+      },
+      "open": 26,
+      "propagation_passes_run": 2,
+      "residue_gap_paise": 2733443,
+      "residue_reconciles": false,
+      "run": "data/regression/seed101",
+      "seed": 101,
+      "split_refusals": [
+        {
+          "amount_paise": 8274560,
+          "bank_line_id": "bl_0063",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0063 ties to this credit and bl_9001 jointly to the paisa, but 103 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0063"
+        },
+        {
+          "amount_paise": 6787041,
+          "bank_line_id": "bl_0019",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0081 ties to this credit and bl_9005 jointly across 31 transactions, but the division search exhausted the 250000 node budget (250001 nodes over a pool of 31)",
+          "settlement_id": null
+        },
+        {
+          "amount_paise": 6787041,
+          "bank_line_id": "bl_9005",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0081 ties to this credit and bl_0019 jointly across 31 transactions, but the division search exhausted the 250000 node budget (250001 nodes over a pool of 31)",
+          "settlement_id": null
+        },
+        {
+          "amount_paise": 6014782,
+          "bank_line_id": "bl_9001",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0063 ties to this credit and bl_0063 jointly to the paisa, but 103 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0063"
+        },
+        {
+          "amount_paise": 4756167,
+          "bank_line_id": "bl_0038",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0038 ties to this credit and bl_9003 jointly to the paisa, but 89 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0038"
+        },
+        {
+          "amount_paise": 4692016,
+          "bank_line_id": "bl_9003",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0038 ties to this credit and bl_0038 jointly to the paisa, but 89 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0038"
+        },
+        {
+          "amount_paise": 3603391,
+          "bank_line_id": "bl_0048",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0048 ties to this credit and bl_9002 jointly to the paisa, but 55 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0048"
+        },
+        {
+          "amount_paise": 3237922,
+          "bank_line_id": "bl_9002",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0048 ties to this credit and bl_0048 jointly to the paisa, but 55 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0048"
+        }
+      ],
+      "transactions": 3009,
+      "uniqueness_node_budget": 40000000
+    },
+    {
+      "all_lines": {
+        "counts": {
+          "FN": 7,
+          "TN": 24,
+          "TP": 103
+        },
+        "n": 134,
+        "precision": 1.0,
+        "recall": 0.9363636363636364
+      },
+      "ambiguity": {
+        "lines": 11,
+        "of": 134,
+        "rate": 0.08208955223880597
+      },
+      "anchors": {
+        "no_true_anchor": 16,
+        "recovered": 93,
+        "true_anchor_present": 77,
+        "wrong": 0
+      },
+      "bank_lines": 134,
+      "buckets": {
+        "by_construction_c3": {
+          "FN": 2,
+          "TP": 4
+        },
+        "by_construction_single": {
+          "TP": 4
+        },
+        "emergent": {
+          "TN": 11
+        },
+        "headline": {
+          "FN": 5,
+          "TN": 13,
+          "TP": 94
+        },
+        "unproven": {
+          "TP": 1
+        }
+      },
+      "by_tier": {
+        "A1": 36,
+        "A3": 11,
+        "B1": 11,
+        "B2": 4,
+        "C1": 28,
+        "C2": 9,
+        "C3": 4
+      },
+      "closed": 103,
+      "false_matches": [],
+      "headline": {
+        "counts": {
+          "FN": 5,
+          "TN": 13,
+          "TP": 94
+        },
+        "n": 112,
+        "precision": 1.0,
+        "recall": 0.9494949494949495
+      },
+      "ledger": {
+        "at_risk_paise": 118984111,
+        "by_type": {
+          "AMBIGUOUS_CONSEQUENTIAL": 8,
+          "DUPLICATE_CREDIT": 6,
+          "ORPHAN_ORDER": 6,
+          "SETTLEMENT_CONTAMINATION": 4,
+          "SPLIT_PAYOUT": 2,
+          "UNIQUENESS_UNPROVEN": 9,
+          "WITHHELD_RECORD": 6
+        },
+        "documentation_paise": 48815651
+      },
+      "open": 31,
+      "propagation_passes_run": 2,
+      "residue_gap_paise": 1053343,
+      "residue_reconciles": false,
+      "run": "data/regression/seed777",
+      "seed": 777,
+      "split_refusals": [
+        {
+          "amount_paise": 4650224,
+          "bank_line_id": "bl_0055",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0055 ties to this credit and bl_9002 jointly to the paisa, but 47 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0055"
+        },
+        {
+          "amount_paise": 3023522,
+          "bank_line_id": "bl_9002",
+          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
+          "reason": "setl_0055 ties to this credit and bl_0055 jointly to the paisa, but 47 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
+          "settlement_id": "setl_0055"
+        }
+      ],
+      "transactions": 3009,
+      "uniqueness_node_budget": 40000000
+    }
+  ],
+  "summary": {
+    "all_lines_precision": {
+      "max": 1.0,
+      "mean": 0.9971416618261278,
+      "min": 0.9902912621359223,
+      "n": 10,
+      "sigma": 0.004367472072986625
+    },
+    "all_lines_recall": {
+      "max": 0.9523809523809523,
+      "mean": 0.9255198728027404,
+      "min": 0.9026548672566371,
+      "n": 10,
+      "sigma": 0.01594528945545191
+    },
+    "ambiguity_rate": {
+      "max": 0.11940298507462686,
+      "mean": 0.07537313432835821,
+      "min": 0.022388059701492536,
+      "n": 10,
+      "sigma": 0.025515404473550385
+    },
+    "closed": {
+      "max": 108,
+      "mean": 102.9,
+      "min": 99,
+      "n": 10,
+      "sigma": 2.4269322199023193
+    },
+    "false_matches": {
+      "clean_on_every_seed": false,
+      "per_seed": {
+        "1": 0,
+        "5": 0,
+        "7": 1,
+        "13": 1,
+        "23": 0,
+        "42": 0,
+        "99": 0,
+        "101": 1,
+        "777": 0,
+        "2026": 0
+      },
+      "total": 3
+    },
+    "headline_precision": {
+      "max": 1.0,
+      "mean": 0.9969974326933089,
+      "min": 0.9896907216494846,
+      "n": 10,
+      "sigma": 0.00458926074829913
+    },
+    "headline_recall": {
+      "max": 1.0,
+      "mean": 0.9703342999315453,
+      "min": 0.9489795918367347,
+      "n": 10,
+      "sigma": 0.0197480412816226
+    },
+    "live_total_ablated_s": {
+      "max": 24.2,
+      "mean": 18.244999999999997,
+      "min": 12.46,
+      "n": 10,
+      "sigma": 3.1062590040110947
+    },
+    "live_total_s": {
+      "max": 80.71,
+      "mean": 41.056,
+      "min": 14.99,
+      "n": 10,
+      "sigma": 22.464354074844884
+    }
+  }
+}

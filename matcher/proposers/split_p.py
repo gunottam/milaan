@@ -66,7 +66,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from core.coherence import MAX_STRAY_ITEMS, is_plausible_payout
 from core.models import BankLine, GatewayTxn, settlement_members, target
 from core.money import Paise, window_key
-from core.subsetsum import C2_MAX_POOL, SearchBudgetExceeded, solve_exact
+from core.subsetsum import (C2_MAX_POOL, SearchBudgetExceeded, count_exact,
+                            solve_exact)
 from matcher.proposers.base import Claim, Pool
 from matcher.proposers.search_p import SETTLEMENT_WINDOW_DAYS, SUBSET_NODE_BUDGET
 
@@ -97,19 +98,36 @@ class SplitProposer:
         # refusal with the wrong label sends a human looking for a missing record
         # that is not missing.
         self.refusals: dict[str, str] = {}
-        # bank_line_id -> the other half, and -> the settlement behind the pair.
+        # bank_line_id -> the other halves, and -> the settlements behind the pair.
         # Kept on the tier rather than on the `Claim`: they are how the refusal and
         # the ledger name the finding, and I9's discipline is that the claim carries
         # only what the gates read.
-        self.partners: dict[str, str] = {}
-        self._anchors: dict[str, str] = {}
+        #
+        # **Sets, not single values, and the ten-seed regression is why.** One credit
+        # can tie out jointly against more than one settlement and with more than one
+        # partner — seed 99's `bl_9007` pairs with either `bl_0041` or `bl_9006`
+        # across `setl_0085` and `setl_0106`. Holding the first of each made the
+        # refusal sentence name one settlement while the ledger row named another,
+        # and a refusal that misnames its own settlement is the failure stage 13
+        # fixed once already on `bl_9001`.
+        self.partners: dict[str, set[str]] = {}
+        self._anchors: dict[str, set[str]] = {}
+        # bank_line_id -> `(settlement_id, payout)` for every payout C3 proved
+        # against this credit and its partner, and -> this credit's own target. Both
+        # exist for one purpose: the refusal sentence names how many divisions
+        # balance, and a number the search stopped counting at 2 is not that number
+        # (`count_exact`).
+        self._payouts: dict[str, set[tuple[str, tuple[str, ...]]]] = {}
+        self._targets: dict[str, Paise] = {}
 
     def prepare(self, order: Sequence[BankLine], pools: Mapping[str, Pool],
                 claimed: frozenset[str], pass_no: int) -> None:
         """Plan every pair, then decide which lines it actually determined."""
         self.plan, self.refusals = {}, {}
         self.partners, self._anchors = {}, {}
+        self._payouts, self._targets = {}, {}
         lines = sorted(order, key=lambda b: b.bank_line_id)
+        self._targets = {b.bank_line_id: target(b) for b in lines}
         anchors = [(sid, group) for sid, group in sorted(self._members.items())
                    if not set(group) & claimed]
         for i, first in enumerate(lines):
@@ -125,8 +143,7 @@ class SplitProposer:
             if len(distinct) == 1:
                 self.refusals.pop(bank_line_id, None)
             else:
-                self.refusals[bank_line_id] = self._sentence(bank_line_id,
-                                                             len(distinct))
+                self.refusals[bank_line_id] = self._sentence(bank_line_id)
 
     def propose(self, line: BankLine, pool: Pool) -> list[Claim]:
         return self.plan.get(line.bank_line_id, [])
@@ -202,37 +219,78 @@ class SplitProposer:
                 continue
             self._claim(first, second, sid, tuple(sorted(half)), rest)
             self._claim(second, first, sid, rest, tuple(sorted(half)))
+            for line in (first, second):
+                self._payouts.setdefault(line.bank_line_id, set()).add((sid, payout))
 
     def _claim(self, line: BankLine, partner: BankLine, sid: str,
                mine: tuple[str, ...], theirs: tuple[str, ...]) -> None:
         self.plan.setdefault(line.bank_line_id, []).append(
             Claim(line.bank_line_id, mine, anchor_settlement_id=sid,
                   window_days=self.window_days, joint_with=theirs))
-        self.partners.setdefault(line.bank_line_id, partner.bank_line_id)
-        self._anchors[line.bank_line_id] = sid
+        self.partners.setdefault(line.bank_line_id, set()).add(partner.bank_line_id)
+        self._anchors.setdefault(line.bank_line_id, set()).add(sid)
 
     def _refuse(self, first: BankLine, second: BankLine, sid: str, size: int,
                 why: str) -> None:
         for line, partner in ((first, second), (second, first)):
-            self.partners.setdefault(line.bank_line_id, partner.bank_line_id)
-            self._anchors[line.bank_line_id] = sid
+            self.partners.setdefault(line.bank_line_id, set()).add(partner.bank_line_id)
+            self._anchors.setdefault(line.bank_line_id, set()).add(sid)
             self.refusals.setdefault(
                 line.bank_line_id,
                 f"SPLIT_PAYOUT: {sid} ties to this credit and "
                 f"{partner.bank_line_id} jointly across {size} transactions, but "
                 f"{why}")
 
-    def _sentence(self, bank_line_id: str, alternatives: int) -> str:
+    def _census(self, bank_line_id: str) -> list[tuple[str, list[int]]]:
+        """`[(settlement_id, divisions per payout)]` — how many sets balance, exactly.
+
+        Not how many the search stopped at. `solve_exact` returns two and stops,
+        because two is already a refusal, so the count it hands back says "at least
+        2" whatever the truth is. The truth on seed 42 is that **279 divisions of
+        `setl_0048`'s payout balance against `bl_0048`'s credit**, and that figure is
+        the finding rather than a detail of it: it is the difference between "the
+        search gave up" and "the source data does not contain the answer".
+        `count_exact` is a census and proposes nothing, so counting past two costs no
+        guarantee.
+
+        Grouped by settlement and never summed. Two payouts can share a division, so
+        a total would claim more distinct sets than exist; and a credit that ties out
+        against two *different* settlements is a different finding again, which the
+        sentence has to say rather than average over.
+        """
+        found: dict[str, list[int]] = {}
+        target_paise = self._targets[bank_line_id]
+        for sid, payout in sorted(self._payouts.get(bank_line_id, ())):
+            found.setdefault(sid, []).append(
+                count_exact([self._txns[e] for e in payout], target_paise))
+        return [(sid, sorted(counts, reverse=True))
+                for sid, counts in sorted(found.items())]
+
+    def _sentence(self, bank_line_id: str) -> str:
         """§10's bar: name the missing input in one sentence.
 
-        "Sets of its transactions", not "divisions of the payout", because two
-        things can be undetermined and the count covers both: the division of one
-        payout across the two credits, and — where two identical strays each
-        compose the residual — which payout it was. `bl_9001` on seed 42 is the
-        second kind and `bl_0019` the first.
+        Three things can be undetermined, independently, and the sentence names
+        whichever ones are: the **division** of one payout across the two credits;
+        **which payout** it was, where two identical strays each compose the
+        residual; and **which settlement or partner**, where a credit ties out
+        jointly more than one way. `bl_0019` on seed 42 is the first, `bl_9001` the
+        second, seed 99's `bl_0041` the third.
         """
-        return (f"SPLIT_PAYOUT: {self._anchors[bank_line_id]} ties to this credit "
-                f"and {self.partners[bank_line_id]} jointly to the paisa, but "
-                f"{alternatives} different sets of its transactions balance "
-                f"against this credit and the statement does not say which of "
-                f"them this credit carried")
+        census = self._census(bank_line_id)
+        joint = " or ".join(sorted(self.partners.get(bank_line_id, ())))
+        if len(census) == 1:
+            sid, counts = census[0]
+            who = f"{sid} ties to this credit and {joint}"
+            what = (f"{counts[0]} divisions of the payout balance against this "
+                    f"credit" if len(counts) == 1 else
+                    f"{len(counts)} payouts of it tie out that way, dividing "
+                    f"{' and '.join(str(c) for c in counts)} ways")
+        else:
+            who = (f"{len(census)} settlements "
+                   f"({', '.join(sid for sid, _ in census)}) tie to this credit "
+                   f"and {joint}")
+            what = ", ".join(
+                f"{sid} divides {' and '.join(str(c) for c in counts)} ways"
+                for sid, counts in census)
+        return (f"SPLIT_PAYOUT: {who} jointly to the paisa, but {what}, and the "
+                f"statement does not say which of them this credit carried")

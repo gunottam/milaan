@@ -45,6 +45,12 @@ from scoring.score import (BUCKETS, DISCLOSED, all_lines, phase_e, precision,
 
 RUNS = Path("data/runs")
 
+# §11's multi-seed variance, precomputed offline by `python -m scoring.regression`.
+# Served as a file rather than computed on request: the whole claim of the figure is
+# that it was measured at the node budget with no clock in it, and a run triggered
+# from a browser has a clock in it by definition.
+REGRESSION = Path("regression.json")
+
 # §12's phase enum, in order. `detective_a` and `detective_b` are listed because the
 # spec lists them; they are skipped until stage 12 builds the detective, and the run
 # says so rather than idling on a phase that is doing nothing.
@@ -433,6 +439,20 @@ def line_detail(report: Mapping, bank_line_id: str) -> dict:
         if exc["bank_line_id"] == bank_line_id:
             return {"kind": "exception", **exc}
     raise HTTPException(404, f"no line {bank_line_id}")
+
+
+@app.get("/api/regression")
+def get_regression() -> dict:
+    """`regression.json`, verbatim. §11's mean ± σ across ten seeds.
+
+    Not one of §12's four endpoints and not part of a run: it is a static artefact
+    the board renders beside the live figures, so a reader can see what the seed in
+    front of them is a sample of. 404 until the harness has been run.
+    """
+    if not REGRESSION.is_file():
+        raise HTTPException(404, "no regression.json — run "
+                                 "`python -m scoring.regression`")
+    return json.loads(REGRESSION.read_text(encoding="utf-8"))
 
 
 @app.get("/api/runs/{run_id}/lines/{bank_line_id}")

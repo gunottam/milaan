@@ -10,6 +10,10 @@
 // No browser, no jsdom, no test runner. esbuild and react-dom/server are already
 // here as Vite and React dependencies.
 //
+// Two more structural claims ride along in the same bundle, both about things a
+// reader must not have to click for: the `SPLIT_PAYOUT` refusals carry their census
+// sentence on the page, and the regression table carries every figure with its ± σ.
+//
 //   node check-strip.mjs
 import { build } from 'esbuild'
 import { writeFileSync, rmSync } from 'node:fs'
@@ -29,21 +33,74 @@ const ROW = {
   },
 }
 
+// One refused pair, as the ledger emits it. The census sentence is the claim.
+const REFUSED = [
+  { bank_line_id: 'bl_0048', settlement_id: 'setl_0048',
+    amount_at_risk_paise: 4445390, exception_type: 'SPLIT_PAYOUT',
+    evidence: ['setl_0048 ties to this credit and bl_9003 jointly to the paisa, '
+               + 'but 279 divisions of the payout balance against this credit, and '
+               + 'the statement does not say which of them this credit carried'],
+    blocked_on: 'A bank advice naming the transactions behind each credit.' },
+  { bank_line_id: 'bl_9003', settlement_id: 'setl_0048',
+    amount_at_risk_paise: 4337770, exception_type: 'SPLIT_PAYOUT',
+    evidence: ['setl_0048 ties to this credit and bl_0048 jointly to the paisa, '
+               + 'but 279 divisions of the payout balance against this credit, and '
+               + 'the statement does not say which of them this credit carried'],
+    blocked_on: 'A bank advice naming the transactions behind each credit.' },
+]
+
+// Two seeds, one of them carrying a false match, so the FP cell's one job can be
+// checked: it is the only figure on the page that gets a colour.
+const REG = {
+  harness: {
+    seeds: [42, 7], scoring_rule: 'per-line composition set equality (I5).',
+    offline: { deadline_ms: null, uniqueness_node_budget: 40000000 },
+    live: { ceiling_s: 60, uniqueness_node_budget: 5000000 },
+  },
+  seeds: [
+    { seed: 42, bank_lines: 134, closed: 100,
+      all_lines: { recall: 0.952, precision: 1, counts: { FP: 0 } },
+      headline: { recall: 1 }, ambiguity: { rate: 0.119 } },
+    { seed: 7, bank_lines: 134, closed: 103,
+      all_lines: { recall: 0.903, precision: 0.99, counts: { FP: 1 } },
+      headline: { recall: 0.988 }, ambiguity: { rate: 0.06 } },
+  ],
+  live: [{ seed: 42, total_s: 56.3, total_ablated_s: 9.9 },
+         { seed: 7, total_s: 70.0, total_ablated_s: 11.2 }],
+  summary: {
+    all_lines_recall: { mean: 0.9275, sigma: 0.0245, min: 0.903, max: 0.952 },
+    headline_recall: { mean: 0.994, sigma: 0.006, min: 0.988, max: 1 },
+    all_lines_precision: { mean: 0.995, sigma: 0.005, min: 0.99, max: 1 },
+    ambiguity_rate: { mean: 0.0895, sigma: 0.0295, min: 0.06, max: 0.119 },
+    live_total_s: { mean: 63.15, sigma: 6.85, min: 56.3, max: 70 },
+    live_total_ablated_s: { mean: 10.55, sigma: 0.65, min: 9.9, max: 11.2 },
+    false_matches: { per_seed: { 42: 0, 7: 1 }, total: 1,
+                     clean_on_every_seed: false },
+  },
+}
+
 writeFileSync(ENTRY, `
 import { renderToStaticMarkup } from 'react-dom/server'
-import { Row } from './src/Board'
+import { Row, Refused } from './src/Board'
+import Regression from './src/Regression'
 const row = ${JSON.stringify(ROW)}
 const table = (open) => renderToStaticMarkup(
   <table className="ledger"><tbody>
     <Row row={row} index={0} tint={false} open={open} onToggle={() => {}} />
   </tbody></table>)
-module.exports = { closed: table(false), open: table(true) }
+module.exports = {
+  closed: table(false),
+  open: table(true),
+  refused: renderToStaticMarkup(<Refused rows={${JSON.stringify(REFUSED)}} />),
+  regression: renderToStaticMarkup(<Regression data={${JSON.stringify(REG)}} />),
+}
 `)
 
 await build({ entryPoints: [ENTRY], bundle: true, format: 'cjs', outfile: OUT,
               platform: 'node', packages: 'external', logLevel: 'silent',
               jsx: 'automatic' })
-const { closed, open } = createRequire(import.meta.url)(`./${OUT}`)
+const { closed, open, refused, regression } =
+  createRequire(import.meta.url)(`./${OUT}`)
 rmSync(ENTRY); rmSync(OUT)
 
 const fail = []
@@ -84,6 +141,51 @@ ok('it ties, and says so', /class="tie-line"/.test(open) && /ties to the credit/
 ok('the caret flips to \u25be when open', open.includes('\u25be')
    && open.includes('aria-expanded="true"'))
 
+// --- the refusals: the reason is on the page, not behind a click --------------
+
+// Two halves, one payout, one block. A row per half would read as two unexplained
+// credits, which is the confusion the pair exists to remove.
+ok('refused: one block per pair, not one per half',
+   (refused.match(/class="refused"/g) || []).length === 1)
+ok('both halves are named on it',
+   refused.includes('bl_0048 + bl_9003') && refused.includes('setl_0048'))
+ok('the census is on the page, with no expand to reach it',
+   refused.includes('279 divisions of the payout balance against this credit')
+   && !/aria-expanded/.test(refused))
+ok('and it says what would settle it', /class="blocked"/.test(refused)
+   && refused.includes('bank advice'))
+ok('the halves are priced with Indian grouping',
+   refused.includes('\u20b944,453.90') && refused.includes('\u20b943,377.70'))
+
+// --- the regression table: every figure carries its spread -------------------
+
+ok('regression: one row per seed', (regression.match(/class="row/g) || []).length
+   === 2 + 4)                                  // two seeds, four summary rows
+for (const label of ['all-lines recall', 'headline recall', 'precision',
+                     'ambiguity rate']) {
+  ok(`\u00b1 \u03c3 printed for ${label}`, regression.includes(label))
+}
+ok('the \u00b1 figures are there in full', regression.includes('92.8% \u00b1 2.5%')
+   && regression.includes('99.5% \u00b1 0.5%'))
+ok('every figure carries its range too',
+   (regression.match(/class="num range"/g) || []).length === 4)
+ok('the node budget the figures were measured at is on the page',
+   regression.includes('4,00,00,000') || regression.includes('40,000,000'))
+ok('a false match is coloured, and it is the only cell that is',
+   (regression.match(/class="num break"/g) || []).length === 1)
+ok('and it is named rather than averaged away',
+   regression.includes('seed 7: 1 FP') && regression.includes('NOT CLEAN'))
+ok('the live clock is reported against the ceiling, breach named',
+   regression.includes('BREACHED') && regression.includes('seed 7 at 70.0s'))
+ok('with the ablated clock beside it, so a breach can be located',
+   regression.includes('10.6s \u00b1 0.7s') || regression.includes('Ablated'))
+ok('double rule under the summary \u2014 \u00a713 ledger convention',
+   regression.includes('class="double-under"'))
+ok('nothing here expands, sorts or fetches',
+   !/aria-expanded|<button/.test(regression))
+
 if (fail.length) { console.error(`\n  ${fail.length} FAILED`); process.exit(1) }
 console.log('\n  proof strip expands in place \u2014 sibling <tr> in the same table, '
             + 'no modal.')
+console.log('  refusals carry their census, the regression table carries its \u03c3, '
+            + 'and neither needs a click.')

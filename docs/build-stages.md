@@ -237,7 +237,7 @@ and clicking a closed row expands the arithmetic.
 
 ---
 
-## [ ] Stage 14 — regression and freeze
+## [x] Stage 14 — regression and freeze
 
 > Read `@docs/spec.md` section 11. Run ten seeds offline with **node budget only, no wall
 > clock**, write `regression.json`, render it as a static table.
@@ -260,24 +260,20 @@ and clicking a closed row expands the arithmetic.
 > nothing in the repo imports by name. Stage 14's numbers are the ones that go on a slide, and
 > a number from the system interpreter is not the same number.
 >
-> **Carried over from stage 13, and it is required, not optional: score a `SPLIT_PAYOUT` pair
-> as a pair.** Truth already carries `split_partner`. The current per-line rule compares each
-> half's composition to truth's half, and `docs/journal/stage-13.md` measured that the input
-> does not determine the halves — `setl_0019`'s payout admits 6 divisions balancing its
-> credit and `setl_0048`'s admits 279, and truth asserts one of them by construction. So the
-> rule penalises the matcher for not knowing an attribution the data does not contain, which
-> is not a matcher failure and is not a thing recall should measure.
+> **Pair-scoring a `SPLIT_PAYOUT`: MEASURED AND DECLINED.** Carried into this stage from
+> stage 13 as required. It was measured first and then declined, and the measurement is the
+> reason rather than the cost of building it — this entry stays here so somebody reading in
+> order sees a decision instead of a vanished item.
 >
-> The replacement: for a line whose truth record has `split_partner`, TP iff the agent's
+> The proposal: for a line whose truth record has `split_partner`, TP iff the agent's
 > composition **unioned with its composition for the partner** equals truth's union of the
-> two, and the agent asserted the pair. **Stricter, not laxer** — every wrong composition is
-> still FP and the union is exact — it only stops scoring the one thing the statement never
-> recorded. C3 has to change with it: where the payout is proved and the division is not, it
-> must commit *some* balanced division rather than refuse, because a refused line contributes
-> no composition to any union.
+> two. Stricter than the per-line rule on paper — every wrong composition is still FP and the
+> union is exact — and it stops scoring the one thing the statement never recorded. It needs
+> one change in C3 to be worth anything: where the payout is proved and the division is not,
+> C3 must **commit some balanced division** rather than refuse, because a refused line
+> contributes no composition to any union.
 >
-> **It is worth 2 TP on seed 42, not 6, and the reason is a second ambiguity that pair
-> scoring cannot forgive.** Measured on the committed board:
+> **That change is the reason it is declined.** Measured on the committed board:
 >
 > | pair | distinct payouts C3 proposes | divisions of it | union rule reads |
 > |---|---|---|---|
@@ -285,22 +281,52 @@ and clicking a closed row expands the arithmetic.
 > | `bl_0019` + `bl_9002` | **2** | 6 | refuse — `rfnd_00560` and `rfnd_00567` both net −₹499.00, so *which* stray the payout netted is undetermined and the two unions differ |
 > | `bl_0101` + `bl_9001` | **2** | 1 | refuse — same, `rfnd_02558` vs `rfnd_02564` at −₹999.00 |
 >
-> So the honest figure is **1 TP → 2 TP**, and note `bl_0101` *loses* its per-line TP: the
-> pair it belongs to is ambiguous at the payout level even though its own half is not. The
-> residual ambiguity is §6.2's ordinary repeated pricing, not a split-payout artefact, and
-> forgiving it would mean guessing which of two identical refunds the bank netted — a false
-> match half the time by construction. Reading 6 requires exactly that guess. Do not.
+> **The whole change is worth 1 TP → 2 TP on seed 42** — and `bl_0101` *loses* the TP it has
+> today, because the pair it belongs to is undetermined at the payout level even though its
+> own half is not. One line of recall, bought by making C3 commit a division that the three
+> CSVs do not contain: two identical refunds sit behind each of the two ambiguous pairs, so
+> the committed division is **a false match half the time by construction**. §1 prices those
+> two outcomes and they are not close — a missed match costs a human minutes, a false match
+> puts the books wrong silently and propagates to GST and revenue. §17: Milaan does not
+> invent distinctions to break ties.
 >
-> It is here rather than in stage 13 because changing the scoring rule in the same commit as
-> the tier the rule rewards is not a measurement. Ten seeds visible is the moment: report
-> both figures side by side for at least one seed so the change is legible as a change, and
-> say in `regression.json` which rule produced the numbers.
+> `regression.json` and the scoreboard both name the rule that produced their numbers
+> (`scoring/regression.py::SCORING_RULE`), so the declined change cannot be mistaken for a
+> silent one later.
+>
+> **Ship the refusals instead, on the board, with their reason.** The claim is stronger than
+> the recall point and it is checkable: `bl_0048` + `bl_9003` — *279 divisions of `setl_0048`'s
+> payout balance against this credit, and the statement does not say which of them this
+> credit carried.* `core.subsetsum.count_exact` censuses that exactly rather than reporting
+> the two `solve_exact` stops at, because "the solver found two and gave up" and "the input
+> does not contain the answer" are different findings and only one of them is true.
 >
 > Then stop building. Rehearse the live-seed run until it cannot fail.
 
 **Done when:** `pytest -q` and `pytest -q -m slow` are green **inside `.venv`** (~6 min),
-pair-scored `SPLIT_PAYOUT` is in and reported beside the per-line figure, `regression.json`
-shows mean ± σ recall across ten seeds, and three consecutive live runs on judge-chosen seeds
-complete inside 60 s.
+`regression.json` shows mean ± σ for all-lines recall, headline recall, precision and the
+ambiguity rate across ten seeds with the per-seed spread visible beside the mean, the
+`SPLIT_PAYOUT` refusals are on the board with their census, and the per-seed live wall clock
+is measured against §15's 60 s ceiling on all ten seeds rather than assumed from seed 42.
+Pair-scored `SPLIT_PAYOUT` is **declined**, recorded above and in
+`docs/journal/stage-13.md`.
+
+**Measured, and two of those criteria did not pass — see `docs/journal/stage-14.md`:**
+
+- all-lines recall **92.6% ± 1.6%** (90.3% – 95.2%), headline recall **97.0% ± 2.0%**,
+  ambiguity **7.5% ± 2.6%** (2.2% – 11.9%) across ten seeds, node budget only.
+- **precision is 99.7% ± 0.4%, not 100.0% on every seed.** Seeds 7, 13 and 101 each book one
+  false match and all three are `DUPLICATE_CREDIT`: the duplicate posting carries an
+  identical narration, ref_no and amount, so whichever of the two credits §9.8's sort reaches
+  first composes the settlement. Seed 42 is clean by a `bank_line_id` tie-break. One rule
+  fixes it, it reuses `matcher/ledger.py::reversal_pairs`, and it is **not built here** — a
+  matcher change inside the measurement stage is not a measurement.
+- **§15's 60 s ceiling holds ablated and not with Phase D answering.** Ablated: 18.2 s ± 3.1 s,
+  12.5 – 24.2 s, ten of ten inside. With the model answering (six seeds — the other four hit
+  Groq's 200k daily token cap and returned 429 on every batch): 33.8 – 80.7 s, mean 56.2 s,
+  **breaching on two of six**. The run deadline is checked between tiers and before each
+  line, so it bounds every search tier and cannot interrupt a batch already in flight. Phase
+  D closed **zero** extra lines on all ten seeds, for 297 paise — a floor, since four passes
+  were refused.
 
 `git commit -m "stage 14: offline regression, freeze"`

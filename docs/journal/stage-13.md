@@ -330,10 +330,35 @@ of two identical refunds the bank netted, which is a false match half the time b
 construction — §6.2's ordinary repeated pricing, and nothing pair scoring may
 forgive.
 
-The rule should still change, because 1 TP is measuring the wrong thing whatever
-the replacement scores. It is queued on stage 14 (`docs/build-stages.md`) with the
-numbers above, alongside the C3 change it needs: a refused line contributes no
-composition to any union, so where the payout is proved and only the division is
-not, C3 has to commit some balanced division rather than refuse. Not in this stage —
-changing the scoring rule in the same commit that adds the tier the rule rewards is
-how a measurement stops being one.
+### Answered at stage 14: measured, and DECLINED
+
+**Not queued — decided.** The rule is not changing, and the number above is the
+reason rather than the effort of building it: **1 TP → 2 TP on seed 42**, with
+`bl_0101` giving up the TP it has today.
+
+The price of those two lines is the C3 change the rule needs. A refused line
+contributes no composition to any union, so where the payout is proved and only the
+division is not, C3 would have to **commit some balanced division** rather than
+refuse. On this board that means committing one of 279 for `setl_0048`, and — on the
+two pairs where the payout itself is undetermined — guessing which of two identical
+refunds the bank netted. That guess is a false match half the time **by
+construction**, which is not a risk profile a recall point pays for: §1 prices a
+missed match at a human's minutes and a false match at books that are silently
+wrong and propagate to GST and revenue.
+
+So per-line composition set equality (I5) stands, and stage 14 reports the refusals
+instead — on the board, with the census that makes each one a refusal rather than a
+miss:
+
+> `bl_0048` + `bl_9003` — *279 divisions of `setl_0048`'s payout balance against
+> this credit, and the statement does not say which of them this credit carried.*
+
+That claim is stronger than the recall point it replaces, and it is now produced by
+shipped code rather than by this document: `core.subsetsum.count_exact` censuses the
+divisions exactly, by meet-in-the-middle, because `solve_exact` stops at two and "the
+solver found two and gave up" is a different finding from "the input does not contain
+the answer". It agrees with the 279 measured by hand here, which is the check on it.
+
+Recorded in `docs/build-stages.md` (stage 14) and in
+`scoring/regression.py::SCORING_RULE`, so the declined change travels with the
+numbers it would have moved.

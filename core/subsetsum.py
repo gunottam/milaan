@@ -134,6 +134,41 @@ def solve_exact(pool: list[GatewayTxn], target_paise: Paise, budget: int,
     return solutions
 
 
+def count_exact(pool: list[GatewayTxn], target_paise: Paise) -> int:
+    """How many subsets of `pool` sum to the target. A census, not a search.
+
+    It returns a count and no compositions, so it cannot propose anything and
+    nothing downstream can act on it — which is the only reason it is allowed to do
+    what `solve_exact` deliberately refuses to do and enumerate past two. C3 needs
+    the figure for one sentence: *279 divisions of this payout balance against this
+    credit, and the statement does not say which.* That claim is the finding, and
+    "at least 2" is the same refusal wearing a weaker reason.
+
+    Meet-in-the-middle, because the DFS cannot answer this at any budget the run
+    can afford — `setl_0048`'s 30-transaction payout exhausts 5,000,000 nodes
+    without finishing the count. Two halves, sums collapsed by value: milliseconds.
+    The empty subset is never a solution (§8.3).
+
+    ponytail: 2**(n/2) dicts, bounded by `C2_MAX_POOL` because C3 refuses above it
+    before it ever asks. Past ~40 items this wants a different algorithm, not a
+    bigger machine.
+    """
+    def sums(items: list[GatewayTxn]) -> dict[Paise, int]:
+        out = {0: 1}
+        for txn in items:
+            nxt = dict(out)
+            for total, count in out.items():
+                nxt[total + txn.net] = nxt.get(total + txn.net, 0) + count
+            out = nxt
+        return out
+
+    half = len(pool) // 2
+    left, right = sums(pool[:half]), sums(pool[half:])
+    found = sum(count * right.get(target_paise - total, 0)
+                for total, count in left.items())
+    return found - 1 if target_paise == 0 else found
+
+
 def solve_tolerance(pool: list[GatewayTxn], target_paise: Paise, budget: int,
                     tol: Paise = TOLERANCE_PAISE, base_size: int = 0,
                     keep: Callable[[tuple[str, ...]], bool] | None = None,

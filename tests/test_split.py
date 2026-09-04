@@ -98,7 +98,9 @@ def test_the_pair_walks_the_gate_chain_and_both_halves_close():
 
     assert tier.propose(lines[0], txns)[0].composition == ("pay_a", "pay_b")
     assert tier.propose(lines[1], txns)[0].composition == ("pay_c", "pay_d")
-    assert tier.partners == {"bl_0001": "bl_0002", "bl_0002": "bl_0001"}
+    # Sets: one credit can tie out jointly with more than one partner across more
+    # than one settlement, and the ten-seed regression found boards where it does.
+    assert tier.partners == {"bl_0001": {"bl_0002"}, "bl_0002": {"bl_0001"}}
     assert tier.refusals == {}
 
 
@@ -326,8 +328,36 @@ def test_the_five_refusals_are_typed_split_payout(with_c3):
         assert "bank advice" in row.blocked_on
         assert any("jointly to the paisa" in e or "jointly across" in e
                    for e in row.evidence)
-        assert any("balance against this credit exactly" in e
-                   for e in row.evidence)
+        assert any("G5 withdrew approval" in e for e in row.evidence)
     # And nothing is typed by the labels they used to wear.
     assert not any(e.bank_line_id in rows and e.exception_type != "SPLIT_PAYOUT"
                    for e in ledger.exceptions)
+
+
+def test_the_refusal_counts_the_sets_that_balance_rather_than_the_two_it_found(with_c3):
+    """**279, not 2.** The number is the whole difference between two readings.
+
+    `solve_exact` stops at two solutions because two is already a refusal, so the
+    figure the search hands back says "at least 2" whatever the truth is — and "the
+    solver found two and gave up" reads as a limitation of Milaan. The truth on this
+    board is that 279 divisions of `setl_0048`'s payout balance against `bl_0048`'s
+    credit and the statement records which one nowhere, which is a fact about the
+    input. `count_exact` censuses it exactly; stage 13 measured the same 279 by
+    hand with meet-in-the-middle, so the two agree by independent route.
+
+    `bl_0019` and `bl_9001` refuse for the *other* reason — two identical refunds
+    each compose the cross-cycle residual, so the payout itself is undetermined —
+    and their sentences say so instead of naming a division count.
+    """
+    _, _, ledger = with_c3
+    reasons = {e.bank_line_id: e.evidence[0] for e in ledger.exceptions
+               if e.exception_type == "SPLIT_PAYOUT"}
+    for half in ("bl_0048", "bl_9003"):
+        assert "279 divisions of the payout balance against this credit" in reasons[half]
+    assert "2 payouts of it tie out that way, dividing 6 and 6 ways" in reasons["bl_0019"]
+    assert "2 payouts of it tie out that way, dividing 1 and 1 ways" in reasons["bl_9001"]
+    # And every sentence still names the settlement, the partner credit and the
+    # missing document — §10's bar, unmoved by the census.
+    for half, reason in reasons.items():
+        assert "ties to this credit and bl_" in reason
+        assert "the statement does not say which of them this credit carried" in reason

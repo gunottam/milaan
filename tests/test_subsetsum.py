@@ -14,7 +14,7 @@ import random
 import pytest
 
 from core.models import GatewayTxn
-from core.subsetsum import (SearchBudgetExceeded, solve_exact,
+from core.subsetsum import (SearchBudgetExceeded, count_exact, solve_exact,
                             solve_tolerance)
 
 BIG = 10_000_000        # effectively unlimited node budget
@@ -69,6 +69,42 @@ def test_dfs_enumerates_exactly_what_brute_force_does(max_size, iterations, seed
         # duplicates consume the two-solution cutoff.
         assert len(found) == len(set(found)), (nets, target, found)
         assert as_sets(found) == expected, (nets, target, sorted(map(sorted, expected)))
+
+
+@pytest.mark.parametrize("max_size,iterations,seed", [(12, 150, 4), (18, 8, 5)])
+def test_the_census_counts_exactly_what_brute_force_enumerates(max_size, iterations,
+                                                               seed):
+    """`count_exact` against the same brute force the DFS is checked with (§6.3).
+
+    The census is what C3's refusal sentence quotes — *279 divisions of this payout
+    balance against this credit* — and a wrong count would put a wrong number in
+    front of a reader with no other check on it. It is a different algorithm from
+    the DFS (meet-in-the-middle, no pruning, no budget), so agreeing with brute
+    force is the only thing that ties the two together.
+    """
+    rng = random.Random(seed)
+    for _ in range(iterations):
+        n = rng.randint(1, max_size)
+        nets = [rng.choice([1, -1]) * rng.randint(1, 40) for _ in range(n)]
+        pool = pool_of(nets)
+        target = (sum(t.net for t in rng.sample(pool, rng.randint(1, n)))
+                  if rng.random() < 0.7 else rng.randint(-200, 200))
+        assert count_exact(pool, target) == len(brute_force(pool, target))
+
+
+def test_the_census_never_counts_the_empty_subset():
+    """§8.3. A zero target is composed by the empty set and that is not a division —
+    a credit the bank posted is not composed of nothing."""
+    pool = pool_of([500, -500, 900])
+    assert count_exact(pool, 0) == len(brute_force(pool, 0)) == 1
+
+
+def test_the_census_sees_past_the_two_solution_cutoff():
+    """The whole reason it exists. Ten interchangeable items give C(10,3) = 120
+    subsets of the same net, and `solve_exact` reports two of them."""
+    pool = pool_of([100] * 10)
+    assert len(solve_exact(pool, 300, BIG)) == 2
+    assert count_exact(pool, 300) == 120
 
 
 def test_the_empty_subset_is_never_a_solution():

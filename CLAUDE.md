@@ -35,6 +35,16 @@ pytest tests/test_invariants.py  # the invariant enforcement, run it constantly
 pytest tests/test_subsetsum.py   # includes the brute-force property test
 ```
 
+```bash
+python -m scoring.regression          # ten seeds -> regression.json. ~10 min cached, ~30 cold
+python -m scoring.regression --table  # re-render the committed file, runs nothing
+(cd web && node check-strip.mjs)      # the JSX structural claims, no browser, no jsdom
+```
+
+The regression's accuracy columns are **node budget only, no wall clock** — reproducible, so
+a differing figure is a real change. Its `live s` column is the only clock in the file and it
+is a property of this box and of Groq's queue, not of the method.
+
 `pyproject.toml` applies `-m 'not slow'`, so **`pytest -q` does not run the measurements.**
 The `slow` set is every test whose assertion lives on the full board — pinned tier counts,
 recall figures, the anchor census, the committed-board residue gap and ledger. Six of them
@@ -117,8 +127,35 @@ Treat changes to it with suspicion.
 - **Do not absorb a delta into a "rounding adjustment"** outside G4's double cap.
 - **Do not build SSE.** Polling at 500 ms is the design.
 - **Do not add SQLite.** `data/runs/` plus a directory glob is the store.
+- **Do not pair-score `SPLIT_PAYOUT`.** Measured at stage 14: 1 TP → 2 TP on seed 42, and
+  declined. It needs C3 to commit a division the source data does not determine — two
+  identical refunds per pair, so the committed division is a false match half the time.
+  `docs/journal/stage-14.md` and `scoring/regression.py::SCORING_RULE`.
 - **Do not scaffold future stages.** Build only the stage you were given.
 - **Do not write excessive comments.** Docstrings on public functions; skip narration.
+
+## Open, measured, not fixed (stage 14)
+
+Both were found by the ten-seed regression and neither is in the committed board's numbers.
+`docs/journal/stage-14.md` has the arithmetic.
+
+- **Precision is 100.0% on nine of ten seeds, not ten.** Seeds 7, 13 and 101 each book one
+  false match, all `DUPLICATE_CREDIT`: the duplicate posting carries a byte-identical
+  narration and ref_no, so a tier composes the settlement against whichever of the two lines
+  the §9.8 sort reaches first. The fix is one monotonically-restrictive rule reusing
+  `matcher/ledger.py::reversal_pairs` before the ladder runs — a credit reversed on T+1 by an
+  equal and opposite debit is not a payout.
+- **§15's Phase D budget is not enforceable as written.** The run deadline is checked between
+  tiers and before each line, so it bounds every search tier; a batching tier does its work in
+  `prepare()` and a batch in flight cannot be interrupted. The live run can therefore enter D1
+  legally at 21.9 s of a 22,000 ms deadline and return well past 60 s — measured at 33.8 s to
+  80.7 s on the six seeds where the model answered, against 12.5 – 24.2 s ablated. Phase D
+  closed zero extra lines on all ten seeds.
+- **Groq's free tier caps tokens per day at 200,000**, and a ten-seed live pass exhausts it.
+  A 429 is counted as a call, so `usage.calls > 0` does not mean the pass ran — read
+  `detective_hypotheses` and `detective_unavailable` (`scoring/regression.py`) or the D-tier
+  refusal strings. The committed `regression.json` predates that field: its four zero-cost
+  live rows were rate-limited, not fast.
 
 ## Style
 
