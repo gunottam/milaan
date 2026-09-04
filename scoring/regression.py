@@ -14,12 +14,20 @@ appear in a number whose whole claim is reproducibility. §11's ablation delta i
 measured on the committed board, not here.
 
 **The live run is the clock, and nothing else.** Same seed, the demo uniqueness
-budget, the run deadline armed and the detective on where credentials resolve —
-which is the configuration a judge triggers from the browser. Its recall is *not*
-recorded: at the demo budget the buckets are sized differently, and printing a
-second recall figure beside the first would invite the comparison §10.1 says is
-invalid. What it is for is §15's 60 s ceiling, measured across ten seeds instead of
-asserted from seed 42.
+budget, the run deadline armed, and **Phase D off by default from stage 15** —
+which is the configuration a judge triggers from the browser (`use_llm: false`,
+`api/main.py::RunRequest`). Its recall is *not* recorded: at the demo budget the
+buckets are sized differently, and printing a second recall figure beside the first
+would invite the comparison §10.1 says is invalid. What it is for is §15's 60 s
+ceiling, measured across ten seeds instead of asserted from seed 42.
+
+**Why Phase D is off in the shipped configuration**, and it is a measurement rather
+than a preference: it closed **zero** extra lines on all ten seeds at stage 14, for
+297 paise, and it cannot be held to §15's 12 s allocation — the run deadline is
+checked between tiers and cannot interrupt a batch in flight, so the same ten seeds
+ran 33.8 s – 80.7 s with the model answering against 12.5 s – 24.2 s ablated, over
+the ceiling on two of six. `--detective` still measures it; the default does not.
+See §15's v1.3.1 amendment and `docs/journal/stage-15.md`.
 
 **Which scoring rule produced these numbers**, because stage 14 nearly changed it:
 per-line composition set equality (I5). Pair-scoring a `SPLIT_PAYOUT` — the agent's
@@ -63,6 +71,16 @@ SCORING_RULE = ("per-line composition set equality (I5). Pair-scored SPLIT_PAYOU
                 "identical refunds per pair), so it is a false match half the time "
                 "by construction. See docs/build-stages.md stage 14 and "
                 "docs/journal/stage-13.md.")
+
+# What changed in the matcher between the stage-14 numbers and these, because the
+# rule above did not: §3.2's reversal-pair rule became a pre-match exclusion
+# (v1.3.1, §9.8). It is monotonically restrictive, so it can only cost recall — and
+# it did not: recall rose on the three seeds that carried the false match, because
+# the transactions the duplicate consumed went back to the line that earned them.
+MATCHER_CHANGE = ("stage 15: §3.2's reversal-pair rule promoted to a pre-match "
+                  "exclusion (matcher/run.py, one implementation shared with §10's "
+                  "typing pass). Removed 3 false matches across 10 seeds — all "
+                  "DUPLICATE_CREDIT — and withheld no resolvable line on any seed.")
 
 
 def dataset(seed: int, root: Path = ROOT, *, window_days: int = cfg.SETTLEMENT_WINDOW_DAYS,
@@ -137,6 +155,19 @@ def offline(seed: int, run_dir: Path) -> dict:
         "uniqueness_node_budget": truth["config"]["uniqueness_node_budget"],
         "closed": len(ladder.matched),
         "open": len(bank_lines) - len(ladder.matched),
+        # Stage 15's pre-match exclusion (§9.8), and **its cost priced against
+        # truth**. An exclusion is monotonically restrictive, so the only way it can
+        # be wrong is by withholding a line that had a composition — which is a
+        # recall loss and has to be visible rather than argued. `withheld_resolvable`
+        # is that number. It is measured here and not in `matcher/`, which cannot
+        # reach `truth.json` (I3).
+        "excluded": {
+            "lines": sorted(ladder.excluded),
+            "pairs": len(ladder.excluded) // 2,
+            "withheld_resolvable": sorted(
+                b for b in ladder.excluded
+                if truth["bank_lines"][b]["resolvable"]),
+        },
         "all_lines": _figures(all_lines(report)),
         "headline": _figures(report.counts("headline")),
         # §6.2's rate control targets 8%; it is reported, never asserted, and the
@@ -312,6 +343,21 @@ def aggregate(rows: Sequence[Mapping], live_rows: Sequence[Mapping] = ()) -> dic
                                 "total": sum(false_matches.values()),
                                 "clean_on_every_seed":
                                     not any(false_matches.values())}
+    # The other side of stage 15's ledger. An exclusion trades recall for
+    # correctness by construction, so the trade has to be priced: how many lines
+    # were withheld from every tier, and how many of those truth says were
+    # matchable. The second number is the cost and it must be reported even when it
+    # is zero, because "we checked" and "it did not come up" are different claims.
+    withheld = {r["seed"]: len(r["excluded"]["withheld_resolvable"])
+                for r in rows if "excluded" in r}
+    if withheld:
+        summary["excluded"] = {
+            "lines_per_seed": {r["seed"]: len(r["excluded"]["lines"])
+                               for r in rows if "excluded" in r},
+            "withheld_resolvable_per_seed": withheld,
+            "withheld_resolvable_total": sum(withheld.values()),
+            "costs_no_recall_on_any_seed": not any(withheld.values()),
+        }
     return summary
 
 
@@ -342,6 +388,7 @@ def run(seeds: Iterable[int] = SEEDS, *, root: Path = ROOT,
         "harness": {
             "seeds": list(seeds),
             "scoring_rule": SCORING_RULE,
+            "matcher_change": MATCHER_CHANGE,
             "offline": {
                 "deadline_ms": None,
                 "uniqueness_node_budget": cfg.UNIQUENESS_NODE_BUDGET_OFFLINE,
@@ -355,7 +402,10 @@ def run(seeds: Iterable[int] = SEEDS, *, root: Path = ROOT,
                 "ceiling_s": 60,
                 "note": "wall clock only. Its recall is not recorded: the demo "
                         "budget sizes the buckets differently and the two "
-                        "denominators do not compare (§10.1)",
+                        "denominators do not compare (§10.1). detective=false is "
+                        "the shipped demo configuration (use_llm: false) — §15's "
+                        "12 s Phase D allocation is not enforceable and Phase D "
+                        "closed zero lines on all ten seeds (v1.3.1)",
             },
         },
         "seeds": rows,
@@ -436,6 +486,16 @@ def render(data: Mapping, width: int = 96) -> list[str]:
                if fp["clean_on_every_seed"]
                else "NOT CLEAN: " + ", ".join(f"seed {s}: {n} FP"
                                               for s, n in fp["per_seed"].items() if n))]
+    exc = summary.get("excluded")
+    if exc:
+        lines = sum(exc["lines_per_seed"].values())
+        out += [f"  reversal-pair exclusion (§3.2, §9.8) withheld {lines} lines "
+                f"across {len(rows)} seeds — "
+                + ("no resolvable line among them on any seed, so it cost zero "
+                   "recall" if exc["costs_no_recall_on_any_seed"] else
+                   "COST RECALL: " + ", ".join(
+                       f"seed {s}: {n}" for s, n
+                       in exc["withheld_resolvable_per_seed"].items() if n))]
     # Named on the page, not only in the file. A false match is the one result that
     # stops a stage, so it does not get to be a digit in a column.
     for row in rows:
@@ -459,6 +519,20 @@ def render(data: Mapping, width: int = 96) -> list[str]:
                    + ", ".join(f"seed {s} at {live_rows[s]['total_s']:.1f}s"
                                for s in breached))]
         ablated_clock = summary.get("live_total_ablated_s") or {}
+        if not harness["live"].get("detective"):
+            # Phase D off *is* the shipped configuration from stage 15, so there is
+            # no second clock to compare against — printing one would compare the
+            # run with itself and then explain the difference.
+            out += [f"  {'':<2}Phase D off, so the two clock columns are one run: "
+                    f"this is the configuration the board ships (use_llm: false). "
+                    f"§15's 12 s Phase D allocation is not enforceable between "
+                    f"tiers, and D closed zero extra lines on every seed stage 14 "
+                    f"measured; the with-model clock is that table.",
+                    f"  {'':<2}the live columns are the demo uniqueness budget "
+                    f"({harness['live']['uniqueness_node_budget']:,}) with the "
+                    f"deadline armed; their recall is not comparable with the "
+                    f"offline columns and is not recorded"]
+            return out + _refusals(rows, width)
         if ablated_clock.get("mean") is not None:
             ablated_breached = [s for s, r in live_rows.items()
                                 if (r.get("total_ablated_s") or 0) > ceiling]
@@ -477,6 +551,14 @@ def render(data: Mapping, width: int = 96) -> list[str]:
                 f"armed; their recall is not comparable with the offline columns "
                 f"and is not recorded"]
 
+    return out + _refusals(rows, width)
+
+
+def _refusals(rows: Sequence[Mapping], width: int) -> list[str]:
+    """§13's refusal block. Its own function because `render` has two exits — the
+    live pass with Phase D on prints an ablation comparison and the shipped one
+    does not, and the refusals belong under both."""
+    out: list[str] = []
     refusals = [(row["seed"], r) for row in rows for r in row["split_refusals"]]
     if refusals:
         out += ["", f"REFUSED — SPLIT_PAYOUT, the pair ties out and the division is "

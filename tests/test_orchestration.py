@@ -24,6 +24,7 @@ import pytest
 
 from core.models import BankLine, GatewayTxn
 from core.subsetsum import DeadlineExceeded, SearchBudgetExceeded, solve_tolerance
+from matcher.ledger import reversal_pairs
 from matcher.proposers.search_p import SearchProposer
 from matcher.run import PROPAGATION_PASSES, Run, run_ladder
 from scoring.score import anchors_recovered, phase_e, render, score
@@ -189,8 +190,15 @@ def test_a_tiny_deadline_gives_a_partial_report_not_a_crash(seed42):
 
     assert run.deadline_hit
     assert run.passes_run == 0
-    assert len(run.exceeded) == len(data.bank_lines)
+    # Every line the ladder *could* have attempted, and not one more. The six
+    # reversal-pair lines are excluded before the first tier opens (stage 15), so
+    # they are not lines the clock stopped — calling them `EXCEEDED_SEARCH_BUDGET`
+    # would print "deadline reached, 6 lines unattempted" about work that never
+    # existed. 134 - 6 = 128.
+    assert len(run.excluded) == 6
+    assert len(run.exceeded) == len(data.bank_lines) - len(run.excluded)
     assert set(run.exceeded).isdisjoint(run.matched)
+    assert set(run.exceeded).isdisjoint(run.excluded)
     banner = run.banner()
     assert banner and "deadline reached" in banner[0]
     assert "EXCEEDED_SEARCH_BUDGET" in banner[1]
@@ -293,3 +301,117 @@ def test_the_bank_line_type_is_untouched():
     """A guard on the one thing this stage could have been tempted to do: carry the
     deadline on the data. It is a property of the run, not of a line."""
     assert not hasattr(BankLine, "deadline_ns")
+
+
+# --- stage 15: §3.2's reversal-pair rule as a pre-match exclusion ------------
+
+
+def _line(bid: str, day: str, credit: int = 0, debit: int = 0,
+          narration: str = "NEFT SETTLEMENT") -> BankLine:
+    return BankLine(bank_line_id=bid, txn_date=day, value_date=day,
+                    narration=narration, ref_no=None, debit_paise=debit,
+                    credit_paise=credit, balance_paise=0)
+
+
+def _duplicate_board() -> tuple[list[GatewayTxn], list[BankLine]]:
+    """One settlement of two payments, and three credits that could compose it.
+
+    `bl_real` is the payout. `bl_dupe` is the bank posting it twice and `bl_rev` is
+    the T+1 contra — equal magnitude, opposite sign, adjacent day, which is the
+    whole of §3.2's rule. Without the exclusion §9.8's sort decides which of the two
+    identical credits gets the settlement, and one of the two answers is wrong.
+    """
+    txns = [GatewayTxn(entity_id="pay_001", type="payment", amount_paise=600_000,
+                       settled_at="2026-01-05T18:30:00+05:30",
+                       settlement_id="setl_01", settlement_utr="UTR001"),
+            GatewayTxn(entity_id="pay_002", type="payment", amount_paise=400_000,
+                       settled_at="2026-01-05T18:30:00+05:30",
+                       settlement_id="setl_01", settlement_utr="UTR001")]
+    lines = [_line("bl_dupe", "2026-01-05", credit=1_000_000),
+             _line("bl_real", "2026-01-05", credit=1_000_000),
+             _line("bl_rev", "2026-01-06", debit=1_000_000)]
+    return txns, lines
+
+
+def test_a_reversal_pair_is_never_offered_a_tier():
+    """The stage-15 rule, on the smallest board that has the bug.
+
+    Both halves stay open and the *real* payout closes. That second half is the
+    point: the transactions the duplicate would have consumed are still there for
+    the line that earned them, which is why the exclusion buys recall as well as
+    precision.
+    """
+    txns, lines = _duplicate_board()
+    run = run_ladder(txns, lines, 2, deadline_ms=None)
+
+    assert set(run.excluded) == {"bl_dupe", "bl_rev"}
+    assert run.excluded["bl_dupe"] == "bl_rev" and run.excluded["bl_rev"] == "bl_dupe"
+    assert set(run.matched) == {"bl_real"}
+    assert {s["line"] for s in run.trace}.isdisjoint(run.excluded), \
+        "no tier may propose on an excluded line, so it leaves no trace row"
+
+
+def test_an_excluded_line_is_not_a_deadline_casualty():
+    """`EXCEEDED_SEARCH_BUDGET` is "the clock stopped this" and it scores as FN with
+    a banner saying so (§9.10). An excluded line was never work. Folding the two
+    together would put a false sentence in front of a reader."""
+    txns, lines = _duplicate_board()
+    run = run_ladder(txns, lines, 2, deadline_ms=None)
+    assert set(run.exceeded).isdisjoint(run.excluded)
+    assert set(run.cut).isdisjoint(run.excluded)
+    assert run.exceeded == () and run.banner() == []
+
+
+def test_the_exclusion_only_ever_removes_candidates():
+    """§1's monotonicity, as a property of this rule rather than a claim about it:
+    a board with no reversal pair is matched identically with the rule in place, so
+    the exclusion cannot create a match or change one."""
+    txns, lines = _duplicate_board()
+    without_pair = [b for b in lines if b.bank_line_id != "bl_rev"]
+    run = run_ladder(txns, without_pair, 2, deadline_ms=None)
+    assert run.excluded == {}
+    # Two identical credits, nothing to tell them apart, and G5 has no view on it
+    # — one of them takes the settlement. That is the pre-stage-15 behaviour and it
+    # is *unchanged*: the rule did not fire, so it removed nothing.
+    assert len(run.matched) == 1
+
+
+def test_reversal_pairs_defaults_to_every_line():
+    """One implementation, two scopes (§3.2). The default is the pre-match scope."""
+    _, lines = _duplicate_board()
+    every = reversal_pairs(lines)
+    assert every == reversal_pairs(lines, [b.bank_line_id for b in lines])
+    # An explicit set is what the ledger hands in, and it restricts.
+    assert reversal_pairs(lines, ["bl_dupe", "bl_real"]) == {}
+
+
+def test_the_ledger_types_exactly_what_the_ladder_excluded(twice):
+    """The drift guard the `reversal_pairs` docstring promises.
+
+    `matcher/run.py` calls it over every line, before anything has matched; §10
+    calls it over the lines still open, after. The two scopes agree only because an
+    excluded line is never matched and so is still open when the ledger looks — and
+    "only because" is the kind of reasoning that survives until someone changes one
+    of the two call sites. So it is asserted on the 134-line board rather than
+    argued in a docstring.
+    """
+    data, truth, runs = twice
+    run = runs[0]
+    _, ledger = phase_e(list(data.txns), list(data.bank_lines),
+                        list(data.orders), run)
+    typed = {e.bank_line_id for e in ledger.exceptions
+             if e.exception_type == "DUPLICATE_CREDIT"}
+    assert set(run.excluded) == typed
+    # Seed 42 injects three pairs, six lines. Pinned, so a generator change that
+    # stopped injecting them cannot make this test pass by having nothing to find.
+    assert len(typed) == 6
+    assert set(run.matched).isdisjoint(run.excluded)
+
+
+def test_the_excluded_lines_are_the_ones_truth_calls_duplicates(twice):
+    """The rule is derived from the statement alone (I3) — this test is the only
+    place the two are compared, and it is scoring's side of the fence."""
+    data, truth, runs = twice
+    injected = {bid for bid, rec in truth["bank_lines"].items()
+                if "DUPLICATE_CREDIT" in rec["injected_breaks"]}
+    assert set(runs[0].excluded) == injected

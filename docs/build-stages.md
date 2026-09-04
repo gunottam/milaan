@@ -330,3 +330,73 @@ Pair-scored `SPLIT_PAYOUT` is **declined**, recorded above and in
   were refused.
 
 `git commit -m "stage 14: offline regression, freeze"`
+
+---
+
+## [x] Stage 15 — the reversal-pair exclusion, and two amendments
+
+**Read:** §1 (the monotonicity table), §3.2, §9.8, §15. `docs/journal/stage-14.md`.
+
+One matcher change and two spec amendments. Nothing else — stage 14 left three findings and
+this stage closes all three, two of them by writing down what is true rather than by building.
+
+**The change.** `matcher/ledger.py::reversal_pairs` is promoted to a **pre-match exclusion**
+in `run_ladder`: a bank line with a T+1 equal-and-opposite counterpart is a duplicate posting
+and its contra, not a payout, so no tier is offered either half.
+
+- **Reuse the existing rule.** One implementation, called with `open_lines=None` for the
+  pre-match scope and with an explicit set by §10's typing pass. A second implementation is
+  how the ledger and the matcher drift apart, which is what nearly happened between the
+  generator and the matcher over coherence.
+- **It is an exclusion, not a gate.** It runs in front of the ladder, decides only what may
+  be proposed on, and never sees a candidate. G1–G4 and `check()` are untouched. By §1 it is
+  monotonically restrictive, so a wrong pairing costs recall and cannot approve a wrong
+  answer — which is the whole reason it is allowed to be a heuristic at all.
+- **An excluded line is not `EXCEEDED_SEARCH_BUDGET`.** Nothing ran out of time on it; it was
+  never work. It must not enter §9.10's banner.
+
+**The amendments.** §15's 3 s + 9 s Phase D allocation is **not enforceable** by §9.10's
+mechanism: there is one clock, it is checked between tiers and before each line, and a
+batching tier does its work in `prepare()` where a batch in flight cannot be interrupted.
+Record that in §15 rather than pretending the budget binds. And record that Phase D closed
+**zero** extra lines on all ten seeds, so the demo runs `use_llm: false` — already the
+default in `api/main.py` and `web/src/App.jsx`, now a measured decision rather than a
+convenience.
+
+**Then regenerate `regression.json` and the board.** Stage 14's committed numbers were
+measured against a matcher with a known false match and must not be presented.
+
+**Done when:** `pytest -q` and `pytest -q -m slow` are green inside `.venv`, precision reads
+**100.0% on every one of the ten seeds**, recall is reported before and after so the
+exclusion's cost is visible, and the real payout closes on seeds 7, 13 and 101 rather than
+scoring FN.
+
+**Measured — all three criteria pass:**
+
+| | stage 14 | stage 15 |
+|---|---|---|
+| precision | 99.71% ± 0.44%, **3 FP** on seeds 7, 13, 101 | **100.0% ± 0.0%, 0 FP, ten of ten** |
+| all-lines recall | 92.55% ± 1.59% (90.27 – 95.24) | **92.82% ± 1.42%** (90.83 – 95.24) |
+| headline recall | 97.03% ± 1.97% (94.90 – 100.0) | **97.33% ± 1.90%** (94.90 – 100.0) |
+| lines withheld | — | 60 across 10 seeds, **0 of them resolvable** |
+
+- **The exclusion cost zero recall and bought some.** It withheld 6 lines per seed — exactly
+  the three injected `DUPLICATE_CREDIT` pairs, on every seed, with no collateral — and recall
+  *rose* on the three seeds that carried the false match: the transactions the duplicate had
+  consumed went back to the line that earned them, so each of seeds 7, 13 and 101 turned one
+  FN into a TP. `closed` is unchanged on all ten seeds, because the duplicate stopped closing
+  and the real payout started.
+- **Seed 42 is byte-identical**: 100 closed, 95.24% / 100.0%, 0 FP. It was clean before by a
+  `bank_line_id` tie-break and it is clean now by a rule, which is the actual result — the
+  headline was not earned at stage 14 and is earned now.
+- **Nine `SPLIT_PAYOUT` refusals were about nothing, and this removed them.** Halves went
+  61 → 52 across the ten seeds, on five of them, including two with no false match: C3 had
+  been pairing a real credit with a duplicate posting, which ties out to the paisa because it
+  is the same amount, and refusing the division. Nine of the halves under the board's refusal
+  block were divisions of a settlement against a bank line that was never a payout. Nothing
+  on the board would have surfaced that. `docs/journal/stage-15.md`.
+- **§15's 60 s ceiling holds on all ten seeds in the shipped configuration** — Phase D off,
+  which is what `use_llm: false` runs: **19.2 s ± 3.2 s, range 12.1 – 24.4 s**. Stage 14's
+  with-model table stands as the reason it is asserted for that configuration only.
+
+`git commit -m "stage 15: reversal-pair exclusion, precision 100% on ten seeds"`

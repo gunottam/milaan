@@ -35,6 +35,7 @@ milaan.egg-info/dependency_links.txt
 milaan.egg-info/requires.txt
 milaan.egg-info/top_level.txt
 scoring/__init__.py
+scoring/regression.py
 scoring/score.py
 tests/test_api.py
 tests/test_audit.py
@@ -49,6 +50,7 @@ tests/test_orchestration.py
 tests/test_phase_ab.py
 tests/test_phase_c.py
 tests/test_provider.py
+tests/test_regression.py
 tests/test_scoring.py
 tests/test_split.py
 tests/test_subsetsum.py

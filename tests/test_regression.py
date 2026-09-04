@@ -22,7 +22,8 @@ from scoring.regression import (SCORING_RULE, aggregate, dataset, render,
 
 
 def row(seed: int, *, recall: float, headline: float = 1.0, fp: int = 0,
-        ambiguity: float = 0.08, closed: int = 100) -> dict:
+        ambiguity: float = 0.08, closed: int = 100,
+        withheld: tuple[str, ...] = ()) -> dict:
     """One offline row, cut down to the fields the aggregation reads."""
     return {
         "seed": seed, "bank_lines": 134, "closed": closed,
@@ -32,6 +33,10 @@ def row(seed: int, *, recall: float, headline: float = 1.0, fp: int = 0,
                      "counts": {"TP": 88, "TN": 13}},
         "ambiguity": {"lines": int(ambiguity * 134), "of": 134, "rate": ambiguity},
         "split_refusals": [],
+        # Stage 15's pre-match exclusion. `withheld` is the *cost*: lines it kept
+        # from every tier that truth says had a composition.
+        "excluded": {"lines": [f"bl_900{i}" for i in range(4, 10)], "pairs": 3,
+                     "withheld_resolvable": list(withheld)},
     }
 
 
@@ -155,6 +160,57 @@ def test_the_refusals_are_on_the_table_with_their_reason():
     assert "279 divisions" in text and "bl_0048" in text and "setl_0048" in text
 
 
+# --- stage 15: the exclusion, and the clock it stopped comparing -------------
+
+
+def test_the_exclusion_reports_a_cost_of_zero_rather_than_reporting_nothing():
+    """An exclusion trades recall for correctness by construction, so the trade has
+    to be a figure in the file. "We checked and it was zero" and "we did not check"
+    produce the same silence otherwise."""
+    clean = aggregate([row(1, recall=0.95), row(2, recall=0.93)])["excluded"]
+    assert clean["withheld_resolvable_total"] == 0
+    assert clean["costs_no_recall_on_any_seed"] is True
+    assert clean["lines_per_seed"] == {1: 6, 2: 6}
+
+    costly = aggregate([row(1, recall=0.95),
+                        row(2, recall=0.93, withheld=("bl_0106",))])["excluded"]
+    assert costly["withheld_resolvable_total"] == 1
+    assert costly["costs_no_recall_on_any_seed"] is False
+
+
+def test_a_withheld_real_payout_is_named_on_the_table_not_averaged():
+    """The exclusion's only possible failure. It reads like the false-match line
+    because it is the same kind of claim: one seed is enough to break it."""
+    text = rendered([row(1, recall=0.95),
+                     row(2, recall=0.93, withheld=("bl_0106",))])
+    assert "COST RECALL" in text and "seed 2: 1" in text
+    clean = rendered([row(1, recall=0.95), row(2, recall=0.93)])
+    assert "cost zero recall" in clean and "COST RECALL" not in clean
+
+
+def test_with_phase_d_off_the_table_does_not_compare_the_run_with_itself():
+    """From stage 15 the shipped configuration is Phase D off, and then the ablated
+    clock *is* the live clock. Printing "the difference is the model's round trips"
+    over a difference of zero is a sentence about nothing."""
+    rows = [row(1, recall=0.95)]
+    live = [{"seed": 1, "total_s": 21.4, "total_ablated_s": 21.4}]
+    off = "\n".join(render({"harness": harness(detective=False), "seeds": rows,
+                            "live": live, "summary": aggregate(rows, live)}))
+    assert "round trips" not in off
+    assert "use_llm: false" in off and "zero extra lines" in off
+    assert "one run" in off, "it has to say why the two columns agree"
+    # And the refusal block still renders under the shorter exit.
+    refused = row(1, recall=0.95)
+    refused["split_refusals"] = [{"bank_line_id": "bl_0048",
+                                  "settlement_id": "setl_0048",
+                                  "amount_paise": 1, "reason": "279 divisions",
+                                  "blocked_on": "A bank advice."}]
+    both = "\n".join(render({"harness": harness(detective=False),
+                             "seeds": [refused], "live": live,
+                             "summary": aggregate([refused], live)}))
+    assert "REFUSED — SPLIT_PAYOUT" in both
+
+
 def test_the_committed_board_is_the_seed_42_row():
     """Seed 42 reads `data/runs/seed42` rather than a regenerated copy.
 
@@ -177,3 +233,8 @@ def test_the_shipped_regression_file_matches_the_harness_that_wrote_it():
     assert data["harness"]["offline"]["deadline_ms"] is None
     assert all(r["uniqueness_node_budget"] == 40_000_000 for r in data["seeds"])
     assert "mean ± σ" in "\n".join(render(data))
+    # Stage 15's two claims, on the committed file rather than on a fixture. These
+    # are the numbers that go on a slide, so a stale file must fail rather than
+    # render.
+    assert data["summary"]["false_matches"]["clean_on_every_seed"] is True
+    assert data["summary"]["excluded"]["costs_no_recall_on_any_seed"] is True

@@ -87,7 +87,7 @@ def risk_class(exception_type: str) -> str:
 
 
 def reversal_pairs(bank_lines: Sequence[BankLine],
-                   open_lines: Iterable[str]) -> dict[str, str]:
+                   open_lines: Iterable[str] | None = None) -> dict[str, str]:
     """§3.2's reversal-pair rule: `bank_line_id -> the line that reverses it`.
 
     `DUPLICATE_CREDIT` is detected by its T+1 reversal — equal magnitude, opposite
@@ -102,11 +102,25 @@ def reversal_pairs(bank_lines: Sequence[BankLine],
     conditions are already tight enough that a false pair needs two unrelated
     payouts of *identical* magnitude on consecutive days.
 
-    Only open lines are considered. A closed line has a balanced proof against real
-    transactions, and reversing that on a coincidence of amount and date would
-    withdraw a match no gate rejected.
+    **Two callers, one implementation, and the scope differs on purpose.**
+
+    `open_lines=None` means every line, and that is stage 15's pre-match exclusion
+    in `matcher/run.py`: a credit reversed on T+1 by an equal and opposite debit is
+    a duplicate posting, not a payout, so no tier is offered either half. It runs
+    before anything has matched, so there "open" is every line by definition.
+
+    An explicit set restricts it, which is what §10's typing pass hands in — the
+    lines still open. A closed line has a balanced proof against real transactions,
+    and reversing that on a coincidence of amount and date would withdraw a match
+    no gate rejected. The two scopes agree by construction: a paired line is
+    excluded from the ladder and therefore never matched, so it is still open when
+    the ledger looks. `tests/test_orchestration.py` pins that rather than assuming
+    it, because a second implementation of this rule is exactly how the ledger and
+    the matcher would drift apart.
     """
-    candidates = [b for b in bank_lines if b.bank_line_id in set(open_lines)]
+    wanted = ({b.bank_line_id for b in bank_lines} if open_lines is None
+              else set(open_lines))
+    candidates = [b for b in bank_lines if b.bank_line_id in wanted]
     found: dict[str, str] = {}
     for line in candidates:
         if line.bank_line_id in found:

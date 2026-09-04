@@ -19,6 +19,16 @@ hands each line `min(2000, remaining_ms / unmatched)`. When it runs out the ladd
 stops issuing work, the lines it never reached are named, and scoring runs on what
 was proved. A partial run that reports itself is the thesis; a hang is not.
 
+**One pre-match exclusion (§3.2, stage 15).** A bank line with a T+1 equal-and-opposite
+counterpart is a duplicate posting and its contra, not a payout, and no tier is
+offered either half. It sits in front of the ladder rather than inside it because
+that is what makes it harmless: an exclusion can only remove candidates, so by §1's
+taxonomy a wrong rule here costs recall and cannot produce a false match. G1–G4 and
+`check()` are untouched — nothing about approval changed, only what gets proposed at
+all. Stage 14 measured what its absence costs: three false matches across ten seeds,
+each one §9.8's sort deciding which of two byte-identical credits composes a
+settlement neither of them carried.
+
 The system is greedy (§9.9): matches are committed and never revoked, so a line
 matching early can consume transactions a later line needed. Ordering mitigates it
 and Phase E surfaces the damage. It is not claimed to be optimal.
@@ -28,9 +38,10 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from core.models import BankLine, GatewayTxn, window_pool
+from matcher.ledger import reversal_pairs
 from matcher.proposers.base import Claim
 from matcher.proposers.lookup_p import LookupProposer
 from matcher.proposers.regex_p import RegexProposer
@@ -63,6 +74,11 @@ class Run:
 
     matched: Matched
     trace: list[dict]
+    # §3.2's reversal pairs, `bank_line_id -> the line that reverses it`. No tier
+    # was offered these, so they are neither matched nor unattempted-by-deadline —
+    # §10 types them `DUPLICATE_CREDIT` from the same rule, and they net to zero in
+    # §9.7's gap. Carried so a caller can say *why* a line was never proposed on.
+    excluded: dict[str, str] = field(default_factory=dict)
     # The tier objects the run used. Carried so the scoreboard can read Phase D's
     # token accounting off them (§11's cost per 1k records) without the ladder
     # having to know what a token is.
@@ -191,6 +207,10 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
     Never raises. A deadline is a normal outcome, not an error, and a reconciler
     that dies on its own timeout has converted a partial answer into no answer.
 
+    **§3.2's reversal pairs are excluded before the first tier opens** and appear on
+    the returned `Run.excluded`. They are not `exceeded`: nothing ran out of time on
+    them, they were never work. §10 types them from the same rule.
+
     `on_tier(tier_name, pass_no, closed_so_far)` fires once as each tier opens. It
     exists so §12's `phase` and `progress` fields report what the ladder is actually
     doing rather than a timer pretending to — the API polls at 500 ms and the run is
@@ -203,6 +223,11 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
     b1 = next((t for t in tiers if t.name == "B1"), None)
     c1 = next((t for t in tiers if t.name == "C1"), None)
     last = tiers[-1].name if tiers else None
+
+    # §3.2's reversal-pair rule as an exclusion, once, over every line — see the
+    # module docstring. One rule, one implementation: `matcher/ledger.py` owns it
+    # and §10's typing pass calls the same function over the lines still open.
+    excluded = reversal_pairs(bank_lines)
 
     claimed: set[str] = set()
     matched: Matched = {}
@@ -228,7 +253,9 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                 break
             if on_tier is not None:
                 on_tier(tier.name, pass_no, len(matched))
-            open_lines = [b for b in bank_lines if b.bank_line_id not in matched]
+            open_lines = [b for b in bank_lines
+                          if b.bank_line_id not in matched
+                          and b.bank_line_id not in excluded]
             # Pools are built once per tier, for the sort, and filtered against the
             # live `claimed` set at each line. Rebuilding per line would rescan
             # every transaction 134 times a tier for a set membership test; reusing
@@ -272,7 +299,8 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                 if hasattr(tier, "deadline_ns"):
                     tier.deadline_ns = None if ends_at is None else now + 1_000_000 * min(
                         PER_LINE_CAP_MS,
-                        (ends_at - now) // 1_000_000 // max(len(bank_lines) - len(matched), 1))
+                        (ends_at - now) // 1_000_000 // max(
+                            len(bank_lines) - len(matched) - len(excluded), 1))
                 if tier.name == last:
                     walked.add(line.bank_line_id)
 
@@ -339,10 +367,14 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
             passes_run = pass_no
 
     return Run(
-        matched=matched, trace=trace, tiers=tuple(tiers),
+        matched=matched, trace=trace, tiers=tuple(tiers), excluded=excluded,
+        # An excluded line is not unattempted — it was never attemptable. Folding
+        # it in here would put it in §9.10's banner as a line the clock stopped,
+        # which is a different claim and a false one.
         exceeded=tuple(sorted(b.bank_line_id for b in bank_lines
                               if b.bank_line_id not in matched
-                              and b.bank_line_id not in walked)),
+                              and b.bank_line_id not in walked
+                              and b.bank_line_id not in excluded)),
         passes_run=passes_run, passes_asked=passes,
         elapsed_ms=(time.monotonic_ns() - started) // 1_000_000,
         deadline_ms=deadline_ms,

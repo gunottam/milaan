@@ -29,7 +29,16 @@ export default function Regression({ data }) {
   const { seeds, live = [], summary, harness } = data
   const clock = Object.fromEntries(live.map((r) => [r.seed, r]))
   const fp = summary.false_matches
+  const exc = summary.excluded
   const breached = live.filter((r) => r.total_s > (harness.live?.ceiling_s ?? 60))
+  // The ablated clock is a *comparison*, so it is only worth printing when there
+  // is something to compare. From stage 15 the shipped configuration is Phase D
+  // off, and then the two clocks are the same run — a sentence attributing their
+  // difference to the model's round trips would be explaining a difference of zero.
+  const ablated = summary.live_total_ablated_s
+  const ablationMeasured = ablated?.mean != null
+    && summary.live_total_s?.mean != null
+    && ablated.mean !== summary.live_total_s.mean
 
   return (
     <section className="regression">
@@ -127,16 +136,42 @@ export default function Regression({ data }) {
               ? ` — BREACHED on ${breached.length} of ${live.length} seeds: `
                 + breached.map((r) => `seed ${r.seed} at ${secs(r.total_s)}`).join(', ')
               : ', measured across every seed rather than asserted from one'}.
-            {summary.live_total_ablated_s?.mean != null && (
+            {ablationMeasured ? (
               <>
                 {' '}Ablated — Phase D filtered out of the tier list, same data and
-                same deadline — {pm(summary.live_total_ablated_s, secs)}, range{' '}
-                {secs(summary.live_total_ablated_s.min)}–
-                {secs(summary.live_total_ablated_s.max)}. The difference is the
+                same deadline — {pm(ablated, secs)}, range{' '}
+                {secs(ablated.min)}–{secs(ablated.max)}. The difference is the
                 model&apos;s round trips, which is the one part of the run this
                 machine does not own.
               </>
+            ) : (
+              <>
+                {' '}Phase D is off, so the two clock columns are the same run: this
+                is the configuration the board ships (<span className="mono">
+                use_llm: false</span>). §15&apos;s 12s Phase D allocation is not
+                enforceable — the run deadline is checked between tiers and cannot
+                interrupt a batch in flight — and Phase D closed zero extra lines on
+                every seed measured, so the budget it would enforce is one nothing
+                wants to spend.
+              </>
             )}
+          </li>
+        )}
+        {exc && (
+          <li className={exc.costs_no_recall_on_any_seed ? 'clean' : 'broken'}>
+            <b>reversal-pair exclusion withheld{' '}
+              {Object.values(exc.lines_per_seed).reduce((a, b) => a + b, 0)} lines
+            </b>{' '}
+            across {seeds.length} seeds — a line with a T+1 equal-and-opposite
+            counterpart is a duplicate posting, not a payout, so no tier is offered
+            either half (§3.2, §9.8).{' '}
+            {exc.costs_no_recall_on_any_seed
+              ? 'None of them was a line truth calls resolvable, so the rule cost '
+                + 'zero recall. It can only ever cost recall: an exclusion removes '
+                + 'candidates and never approves one.'
+              : `COST RECALL: ${Object.entries(exc.withheld_resolvable_per_seed)
+                  .filter(([, n]) => n).map(([sd, n]) => `seed ${sd}: ${n}`)
+                  .join(', ')}`}
           </li>
         )}
         <li>

@@ -83,15 +83,23 @@ def test_the_four_dispute_debits_match_at_b2_on_a_negative_target(run):
 
 
 def test_a_recovered_identifier_is_not_a_match(run):
-    """I8. A1 recovered a settlement on 81 lines and closed 40 of them: the other 41
+    """I8. A1 recovered a settlement on 79 lines and closed 40 of them: the other 39
     cited a real settlement whose total is not the payout total. Those fall to C1's
-    anchored residual search in stage 8, not to a weaker identifier test."""
+    anchored residual search in stage 8, not to a weaker identifier test.
+
+    **79 where stage 11 measured 81, and the 40 did not move.** Stage 15's
+    reversal-pair exclusion withholds six lines from the ladder, and two of them used
+    to reach A1 with a parseable narration — the bank's duplicate posting carries the
+    original's narration byte for byte, so of course it did. Neither ever closed
+    here, so `won` is unchanged; what left is two encounters that should never have
+    been offered.
+    """
     _, _, matched, trace = run
     # Pass 1 only: this is what A1 does on a fresh board. The second propagation
     # pass re-offers every open line to every tier (§9.8), so the unfiltered trace
     # counts the same encounter twice.
     a1 = [t for t in trace if t["tier"] == "A1" and t["pass"] == 1]
-    assert len(a1) == 81
+    assert len(a1) == 79
     assert sum(t["won"] for t in a1) == 40
 
 
@@ -101,16 +109,21 @@ def test_the_prefix_cascade_is_mostly_thrown_away(run):
     here. G1 drops the claimed ones in bulk.
 
     **This is the measurement stage 11's regex widening was argued from.** A3 now
-    reaches 21 lines rather than 12, and the median is still 123 candidates with
+    reaches 19 lines rather than 12, and the median is still 123 candidates with
     zero wrong anchors: a large candidate set is what the cascade is *for*, and
     filters 2-4 are G1 and G2, which do not care how many they were handed. The
     cost is nodes, not correctness — see `docs/journal/stage-11.md`.
+
+    **19 where stage 11 measured 21**, and the stale count with it: two of the six
+    lines stage 15's reversal-pair exclusion withholds used to reach A3, and they
+    took their bulk G1 rejections with them. The claim is unchanged — the cascade is
+    still mostly thrown away — so the bound moved rather than becoming a pin.
     """
     _, _, _, trace = run
     a3 = [t for t in trace if t["tier"] == "A3" and t["pass"] == 1]
-    assert len(a3) == 21
+    assert len(a3) == 19
     assert all(t["candidates"] > 1 for t in a3)
-    assert sum(t["stale"] for t in a3) > 800
+    assert sum(t["stale"] for t in a3) > 700
 
 
 def test_a2_finds_nothing_in_this_dataset(run):

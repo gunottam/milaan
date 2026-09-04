@@ -76,7 +76,23 @@ const REG = {
     live_total_ablated_s: { mean: 10.55, sigma: 0.65, min: 9.9, max: 11.2 },
     false_matches: { per_seed: { 42: 0, 7: 1 }, total: 1,
                      clean_on_every_seed: false },
+    excluded: { lines_per_seed: { 42: 6, 7: 6 },
+                withheld_resolvable_per_seed: { 42: 0, 7: 0 },
+                withheld_resolvable_total: 0,
+                costs_no_recall_on_any_seed: true },
   },
+}
+
+// The same figures with Phase D off, which is what the shipped board renders from
+// stage 15. The two clock columns are then one run, and the sentence attributing
+// their difference to the model's round trips must not appear.
+const SHIPPED = {
+  ...REG,
+  live: [{ seed: 42, total_s: 21.4, total_ablated_s: 21.4 },
+         { seed: 7, total_s: 19.8, total_ablated_s: 19.8 }],
+  summary: { ...REG.summary,
+             live_total_s: { mean: 20.6, sigma: 0.8, min: 19.8, max: 21.4 },
+             live_total_ablated_s: { mean: 20.6, sigma: 0.8, min: 19.8, max: 21.4 } },
 }
 
 writeFileSync(ENTRY, `
@@ -93,13 +109,14 @@ module.exports = {
   open: table(true),
   refused: renderToStaticMarkup(<Refused rows={${JSON.stringify(REFUSED)}} />),
   regression: renderToStaticMarkup(<Regression data={${JSON.stringify(REG)}} />),
+  shipped: renderToStaticMarkup(<Regression data={${JSON.stringify(SHIPPED)}} />),
 }
 `)
 
 await build({ entryPoints: [ENTRY], bundle: true, format: 'cjs', outfile: OUT,
               platform: 'node', packages: 'external', logLevel: 'silent',
               jsx: 'automatic' })
-const { closed, open, refused, regression } =
+const { closed, open, refused, regression, shipped } =
   createRequire(import.meta.url)(`./${OUT}`)
 rmSync(ENTRY); rmSync(OUT)
 
@@ -179,6 +196,20 @@ ok('the live clock is reported against the ceiling, breach named',
    regression.includes('BREACHED') && regression.includes('seed 7 at 70.0s'))
 ok('with the ablated clock beside it, so a breach can be located',
    regression.includes('10.6s \u00b1 0.7s') || regression.includes('Ablated'))
+// Stage 15: the exclusion is a claim on the page, and the claim that matters is its
+// *cost*. A rule that withholds lines from every tier has to say how many of them
+// had an answer, even when the number is zero.
+ok('the reversal-pair exclusion is on the page with its line count',
+   regression.includes('withheld') && regression.includes('12 lines'))
+ok('and priced — it says how much recall it cost',
+   regression.includes('cost') && regression.includes('zero recall'))
+// Phase D off is the shipped configuration, and then the ablated column is the same
+// run. Attributing a difference of zero to the model's round trips would be a
+// sentence about nothing.
+ok('with Phase D off the ablation comparison is not printed',
+   !shipped.includes('Ablated') && !shipped.includes("round trips"))
+ok('and the board says which configuration it is instead',
+   shipped.includes('use_llm: false') && shipped.includes('zero extra lines'))
 ok('double rule under the summary \u2014 \u00a713 ledger convention',
    regression.includes('class="double-under"'))
 ok('nothing here expands, sorts or fetches',

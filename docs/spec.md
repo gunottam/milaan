@@ -2,11 +2,17 @@
 
 **Project:** Milaan (मिलान) — settlement reconciliation agent
 **Event:** Razorpay Buildathon, Track 04 — AI Finance Controller
-**Version:** 1.3 — **FROZEN. Build against this document.**
+**Version:** 1.3.1 — **FROZEN. Build against this document.**
 **Companion:** `milaan-workflow.md` (narrative + worked example, still current)
 
 v1.3 merges 25 items: 5 review fixes, 13 edge-case findings (all ruled ACCEPT, §18),
 4 architectural reframes, 3 late additions. Changelog at §18.
+
+**v1.3.1 (stage 15) amends three claims** the ten-seed regression proved wrong: §3.2's
+reversal-pair rule is a pre-match exclusion (§1, §3.2, §9.8), §15's Phase D allocation is not
+enforceable by §9.10's mechanism, and the 60 s ceiling is asserted for the ablated
+configuration only. **§18.1** states each one and what replaced it. Nothing else in v1.3
+moved — the freeze holds and an amendment is recorded, not edited in.
 
 ---
 
@@ -64,6 +70,12 @@ Deterministic verification is the full gate chain.
 | G3 coherence | **Prior** — an empirical claim about how payouts are assembled | **Yes** | Rejects correct answers → lower recall |
 | **G4 tolerance** | **Relaxation** — admits what G2 rejected | **Yes** | **Admits wrong answers → FALSE MATCH** |
 | G5 uniqueness | Set-level refusal — different arity, never approves | Over-eager | Refuses → lower recall |
+| Reversal-pair exclusion (§3.2) | **Pre-match** — withholds a line from every tier | **Yes** | Withholds a real payout → lower recall |
+
+The last row is not a gate and does not sit in the chain. It runs in front of the ladder
+(§9.8), decides only *what may be proposed on*, and never sees a candidate — which is why it
+belongs in this table anyway: the taxonomy is about failure direction, and an exclusion has
+the same direction as a restrictive gate.
 
 **Every gate except G4 is monotonically restrictive — it can only remove candidates, never
 create one. So a wrong prior costs recall, not correctness.**
@@ -175,6 +187,13 @@ net. Pruning already handles mixed signs via the pos/neg suffix arrays (§9.3).
 `DUPLICATE_CREDIT` is detected by its **T+1 reversal**: equal magnitude, opposite sign,
 adjacent calendar day, similar narration. The balance column cannot detect it — a duplicate
 posting is a real posting and the balance includes it.
+
+**Amendment, v1.3.1 (stage 15).** The rule is a **pre-match exclusion**, not only an
+exception type: both halves of a reversal pair are withheld from the ladder before the first
+tier proposes (§9.8). Running it after matching, for typing only, left §9.8's sort deciding
+which of two byte-identical credits composed a settlement neither of them carried — three
+false matches across ten seeds, `docs/journal/stage-14.md`. The exclusion is monotonically
+restrictive per §1, so a wrong pairing costs recall and cannot approve a wrong answer.
 
 ### 3.3 `orders.csv`
 
@@ -697,6 +716,16 @@ Within a tier, lines sort by ascending pool size then `bank_line_id`, so runs ar
 The ladder runs twice (`PROPAGATION_PASSES = 2`). Resolving one line shrinks every other
 pool, which can turn an ambiguous line into a determined one.
 
+**One pre-match exclusion, before the first tier opens (v1.3.1, stage 15).** §3.2's
+reversal-pair rule is evaluated once over every bank line, and both halves of a pair are
+withheld from the ladder: a credit reversed on T+1 by an equal and opposite debit is a
+duplicate posting and its contra, not a payout, so there is nothing to compose and no tier is
+offered either line. One implementation, shared with §10's typing pass.
+
+Excluded lines are **not** `EXCEEDED_SEARCH_BUDGET`. Nothing ran out of time on them; they
+were never work. They stay open, §10 types them `DUPLICATE_CREDIT` from the same rule, and
+they contribute exactly zero to §9.7's residue gap because the pair nets to zero.
+
 ### 9.9 The system is greedy — finding 8.7
 
 Matches are committed and never revoked. A line matching early can consume transactions a
@@ -1006,13 +1035,43 @@ MAX_WINDOW_OVERRIDE_DAYS    = 5      # cap on model-supplied overrides (G1)
 | Verify uniqueness | 4 s | 120 × 20k nodes |
 | Phase A + B | 2 s | O(1) tiers; B1 offloads work that would otherwise reach C |
 | Phase C | 22 s | `MATCH_DEADLINE_MS`, per-line `min(2000, remaining/unmatched)` |
-| Detective A | 3 s | Narration only, concurrent |
-| Detective B | 9 s | Batch 5, concurrent, 2 rounds |
+| Detective A | 3 s | Narration only, concurrent — **not enforced, see below** |
+| Detective B | 9 s | Batch 5, concurrent, 2 rounds — **not enforced, see below** |
 | Audit + score + render | 3 s | Phase E is two sums |
 | **Total** | **49 s** | Hard ceiling 60 s |
 
 Down from v1.2's 52 s: **B1 is a net reduction in load.** Every line it resolves by hash
 lookup never reaches subset-sum, and C is by far the most expensive phase.
+
+### Amendment, v1.3.1 — Phase D's 12 s is a plan, not a bound
+
+**The 3 s and 9 s allocations above are not enforceable by §9.10's mechanism and this table
+should not be read as if they were.** There is one clock, `MATCH_DEADLINE_MS`, and it is
+checked between tiers and before each line. That bounds every *search* tier, because a search
+tier does its work per line. A batching tier does its work in `prepare()`, before the sweep,
+and **a batch already in flight cannot be interrupted** — the deadline has no purchase inside
+a network round trip. So the run can legally enter D1 at 21.9 s of a 22,000 ms deadline and
+return well past the ceiling.
+
+Measured at stage 14 across ten seeds: **33.8 s – 80.7 s** total with the model answering
+against **12.5 s – 24.2 s** ablated, breaching the 60 s ceiling on two of the six seeds where
+Groq answered at all. `docs/journal/stage-14.md` has the per-seed table.
+
+Two honest options, and the second is what ships:
+
+1. **Enforce it.** Give the batching tiers their own deadline and a cancellable client, so
+   `prepare()` abandons in-flight batches at its allocation. That is a real per-tier clock
+   plus request cancellation, and it changes what a partial Phase D means.
+2. **Do not spend the budget.** Phase D closed **zero** extra lines on all ten seeds, for 297
+   paise of tokens. A phase that costs up to 59 s and returns nothing is not a phase the demo
+   should run.
+
+**The demo therefore runs `use_llm: false`** (`api/main.py::RunRequest`, `web/src/App.jsx`).
+Measured in that configuration at stage 15 across the same ten seeds: **19.2 s ± 3.2 s, range
+12.1 – 24.4 s, inside the 60 s ceiling on every one.**
+Phase D stays in the tier list, stays testable, and is measured by the regression harness
+rather than by a judge. §7.2's ablation is a filter over the tier list, so "off" needed no
+new code — and the ablation delta it reports is **0.00**, which is the finding.
 
 ---
 
@@ -1091,3 +1150,23 @@ non-negotiable.
 
 **Correction to earlier prose:** an exception can name the *settlement* and the *gap*, not the
 missing record. Recorded in §17.
+
+---
+
+## 18.1 Amendments, v1.3 → v1.3.1 (stage 15)
+
+Three, all of them measurements the ten-seed regression forced. The spec was frozen at v1.3;
+each of these changes what the spec *claims*, so it is recorded here rather than edited in
+silently.
+
+1. **§3.2's reversal-pair rule is a pre-match exclusion** (§1, §3.2, §9.8). It ran after
+   matching, for exception typing only, and that left §9.8's sort deciding which of two
+   byte-identical credits composed a settlement — 3 false matches across 10 seeds. One rule,
+   in front of the ladder, monotonically restrictive.
+2. **§15's Phase D allocation is not enforceable as written** (§15). One clock, checked
+   between tiers, cannot interrupt a batch in flight. Documented rather than enforced,
+   because Phase D closed zero lines on all ten seeds; the demo runs with it off.
+3. **The 60 s ceiling is asserted only for the ablated configuration.** It holds on all ten
+   seeds there and breached on two of six with the model answering.
+
+`docs/journal/stage-15.md`.

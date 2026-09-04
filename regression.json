@@ -3,10 +3,11 @@
     "live": {
       "ceiling_s": 60,
       "deadline_ms": 22000,
-      "detective": true,
-      "note": "wall clock only. Its recall is not recorded: the demo budget sizes the buckets differently and the two denominators do not compare (\u00a710.1)",
+      "detective": false,
+      "note": "wall clock only. Its recall is not recorded: the demo budget sizes the buckets differently and the two denominators do not compare (\u00a710.1). detective=false is the shipped demo configuration (use_llm: false) \u2014 \u00a715's 12 s Phase D allocation is not enforceable and Phase D closed zero lines on all ten seeds (v1.3.1)",
       "uniqueness_node_budget": 5000000
     },
+    "matcher_change": "stage 15: \u00a73.2's reversal-pair rule promoted to a pre-match exclusion (matcher/run.py, one implementation shared with \u00a710's typing pass). Removed 3 false matches across 10 seeds \u2014 all DUPLICATE_CREDIT \u2014 and withheld no resolvable line on any seed.",
     "offline": {
       "deadline_ms": null,
       "detective": false,
@@ -36,177 +37,207 @@
       "deadline_hit": true,
       "deadline_hit_ablated": true,
       "deadline_ms": 22000,
-      "detective_calls": 11,
-      "detective_cost_paise": 54,
-      "detective_ran": true,
-      "generate_s": 9.69,
-      "match_ablated_s": 7.91,
-      "match_s": 48.38,
+      "detective_calls": 0,
+      "detective_cost_paise": 0,
+      "detective_hypotheses": 0,
+      "detective_malformed": 0,
+      "detective_ran": false,
+      "detective_unavailable": [],
+      "generate_s": 11.3,
+      "match_ablated_s": 9.0,
+      "match_s": 9.0,
       "seed": 42,
-      "total_ablated_s": 17.61,
-      "total_s": 58.08
+      "total_ablated_s": 20.3,
+      "total_s": 20.3
     },
     {
-      "audit_score_s": 0.02,
+      "audit_score_s": 0.0,
       "bank_lines": 134,
       "closed": 103,
       "closed_ablated": 103,
       "deadline_hit": true,
       "deadline_hit_ablated": true,
       "deadline_ms": 22000,
-      "detective_calls": 9,
-      "detective_cost_paise": 39,
-      "detective_ran": true,
-      "generate_s": 11.37,
-      "match_ablated_s": 6.68,
-      "match_s": 56.01,
+      "detective_calls": 0,
+      "detective_cost_paise": 0,
+      "detective_hypotheses": 0,
+      "detective_malformed": 0,
+      "detective_ran": false,
+      "detective_unavailable": [],
+      "generate_s": 12.72,
+      "match_ablated_s": 7.08,
+      "match_s": 7.08,
       "seed": 7,
-      "total_ablated_s": 18.06,
-      "total_s": 67.4
+      "total_ablated_s": 19.81,
+      "total_s": 19.81
     },
     {
-      "audit_score_s": 0.02,
+      "audit_score_s": 0.0,
       "bank_lines": 134,
       "closed": 101,
       "closed_ablated": 101,
       "deadline_hit": true,
       "deadline_hit_ablated": true,
       "deadline_ms": 22000,
-      "detective_calls": 9,
-      "detective_cost_paise": 92,
-      "detective_ran": true,
-      "generate_s": 9.95,
-      "match_ablated_s": 7.77,
-      "match_s": 70.75,
+      "detective_calls": 0,
+      "detective_cost_paise": 0,
+      "detective_hypotheses": 0,
+      "detective_malformed": 0,
+      "detective_ran": false,
+      "detective_unavailable": [],
+      "generate_s": 11.85,
+      "match_ablated_s": 8.5,
+      "match_s": 8.5,
       "seed": 99,
-      "total_ablated_s": 17.74,
-      "total_s": 80.71
+      "total_ablated_s": 20.36,
+      "total_s": 20.36
     },
     {
-      "audit_score_s": 0.02,
+      "audit_score_s": 0.0,
       "bank_lines": 134,
       "closed": 105,
       "closed_ablated": 105,
       "deadline_hit": true,
       "deadline_hit_ablated": true,
       "deadline_ms": 22000,
-      "detective_calls": 16,
-      "detective_cost_paise": 25,
-      "detective_ran": true,
-      "generate_s": 11.34,
-      "match_ablated_s": 4.92,
-      "match_s": 47.89,
+      "detective_calls": 0,
+      "detective_cost_paise": 0,
+      "detective_hypotheses": 0,
+      "detective_malformed": 0,
+      "detective_ran": false,
+      "detective_unavailable": [],
+      "generate_s": 13.54,
+      "match_ablated_s": 5.51,
+      "match_s": 5.51,
       "seed": 2026,
-      "total_ablated_s": 16.27,
-      "total_s": 59.25
+      "total_ablated_s": 19.06,
+      "total_s": 19.06
     },
     {
-      "audit_score_s": 0.01,
-      "bank_lines": 134,
-      "closed": 101,
-      "closed_ablated": 101,
-      "deadline_hit": true,
-      "deadline_hit_ablated": true,
-      "deadline_ms": 22000,
-      "detective_calls": 2,
-      "detective_cost_paise": 28,
-      "detective_ran": true,
-      "generate_s": 11.18,
-      "match_ablated_s": 13.01,
-      "match_s": 22.66,
-      "seed": 1,
-      "total_ablated_s": 24.2,
-      "total_s": 33.84
-    },
-    {
-      "audit_score_s": 0.01,
+      "audit_score_s": 0.0,
       "bank_lines": 134,
       "closed": 103,
       "closed_ablated": 103,
       "deadline_hit": true,
       "deadline_hit_ablated": true,
       "deadline_ms": 22000,
-      "detective_calls": 9,
-      "detective_cost_paise": 59,
-      "detective_ran": true,
-      "generate_s": 13.11,
-      "match_ablated_s": 9.25,
-      "match_s": 25.1,
-      "seed": 5,
-      "total_ablated_s": 22.38,
-      "total_s": 38.23
+      "detective_calls": 0,
+      "detective_cost_paise": 0,
+      "detective_hypotheses": 0,
+      "detective_malformed": 0,
+      "detective_ran": false,
+      "detective_unavailable": [],
+      "generate_s": 11.04,
+      "match_ablated_s": 13.38,
+      "match_s": 13.38,
+      "seed": 1,
+      "total_ablated_s": 24.43,
+      "total_s": 24.43
     },
     {
-      "audit_score_s": 0.02,
+      "audit_score_s": 0.0,
+      "bank_lines": 134,
+      "closed": 103,
+      "closed_ablated": 103,
+      "deadline_hit": true,
+      "deadline_hit_ablated": true,
+      "deadline_ms": 22000,
+      "detective_calls": 0,
+      "detective_cost_paise": 0,
+      "detective_hypotheses": 0,
+      "detective_malformed": 0,
+      "detective_ran": false,
+      "detective_unavailable": [],
+      "generate_s": 13.06,
+      "match_ablated_s": 9.32,
+      "match_s": 9.32,
+      "seed": 5,
+      "total_ablated_s": 22.39,
+      "total_s": 22.39
+    },
+    {
+      "audit_score_s": 0.0,
       "bank_lines": 134,
       "closed": 104,
       "closed_ablated": 104,
       "deadline_hit": true,
       "deadline_hit_ablated": true,
       "deadline_ms": 22000,
-      "detective_calls": 16,
+      "detective_calls": 0,
       "detective_cost_paise": 0,
-      "detective_ran": true,
-      "generate_s": 11.91,
+      "detective_hypotheses": 0,
+      "detective_malformed": 0,
+      "detective_ran": false,
+      "detective_unavailable": [],
+      "generate_s": 11.81,
       "match_ablated_s": 5.79,
-      "match_s": 7.18,
+      "match_s": 5.79,
       "seed": 13,
-      "total_ablated_s": 17.72,
-      "total_s": 19.11
+      "total_ablated_s": 17.6,
+      "total_s": 17.6
     },
     {
-      "audit_score_s": 0.01,
+      "audit_score_s": 0.0,
       "bank_lines": 134,
       "closed": 99,
       "closed_ablated": 99,
       "deadline_hit": true,
       "deadline_hit_ablated": true,
       "deadline_ms": 22000,
-      "detective_calls": 18,
+      "detective_calls": 0,
       "detective_cost_paise": 0,
-      "detective_ran": true,
-      "generate_s": 10.97,
-      "match_ablated_s": 8.68,
-      "match_s": 10.31,
+      "detective_hypotheses": 0,
+      "detective_malformed": 0,
+      "detective_ran": false,
+      "detective_unavailable": [],
+      "generate_s": 10.87,
+      "match_ablated_s": 9.02,
+      "match_s": 9.02,
       "seed": 23,
-      "total_ablated_s": 19.66,
-      "total_s": 21.29
+      "total_ablated_s": 19.89,
+      "total_s": 19.89
     },
     {
-      "audit_score_s": 0.02,
+      "audit_score_s": 0.0,
       "bank_lines": 134,
       "closed": 108,
       "closed_ablated": 108,
       "deadline_hit": true,
       "deadline_hit_ablated": true,
       "deadline_ms": 22000,
-      "detective_calls": 16,
+      "detective_calls": 0,
       "detective_cost_paise": 0,
-      "detective_ran": true,
-      "generate_s": 9.84,
-      "match_ablated_s": 6.5,
-      "match_s": 7.8,
+      "detective_hypotheses": 0,
+      "detective_malformed": 0,
+      "detective_ran": false,
+      "detective_unavailable": [],
+      "generate_s": 9.55,
+      "match_ablated_s": 6.31,
+      "match_s": 6.31,
       "seed": 101,
-      "total_ablated_s": 16.35,
-      "total_s": 17.66
+      "total_ablated_s": 15.86,
+      "total_s": 15.86
     },
     {
-      "audit_score_s": 0.02,
+      "audit_score_s": 0.0,
       "bank_lines": 134,
       "closed": 103,
       "closed_ablated": 103,
-      "deadline_hit": true,
+      "deadline_hit": false,
       "deadline_hit_ablated": false,
       "deadline_ms": 22000,
-      "detective_calls": 18,
+      "detective_calls": 0,
       "detective_cost_paise": 0,
-      "detective_ran": true,
-      "generate_s": 7.05,
-      "match_ablated_s": 5.4,
-      "match_s": 7.92,
+      "detective_hypotheses": 0,
+      "detective_malformed": 0,
+      "detective_ran": false,
+      "detective_unavailable": [],
+      "generate_s": 6.99,
+      "match_ablated_s": 5.1,
+      "match_s": 5.1,
       "seed": 777,
-      "total_ablated_s": 12.46,
-      "total_s": 14.99
+      "total_ablated_s": 12.09,
+      "total_s": 12.09
     }
   ],
   "seeds": [
@@ -227,8 +258,8 @@
         "rate": 0.11940298507462686
       },
       "anchors": {
-        "no_true_anchor": 24,
-        "recovered": 101,
+        "no_true_anchor": 20,
+        "recovered": 97,
         "true_anchor_present": 77,
         "wrong": 0
       },
@@ -262,6 +293,18 @@
         "C3": 1
       },
       "closed": 100,
+      "excluded": {
+        "lines": [
+          "bl_9004",
+          "bl_9005",
+          "bl_9006",
+          "bl_9007",
+          "bl_9008",
+          "bl_9009"
+        ],
+        "pairs": 3,
+        "withheld_resolvable": []
+      },
       "false_matches": [],
       "headline": {
         "counts": {
@@ -335,14 +378,13 @@
     {
       "all_lines": {
         "counts": {
-          "FN": 11,
-          "FP": 1,
-          "TN": 20,
-          "TP": 102
+          "FN": 10,
+          "TN": 21,
+          "TP": 103
         },
         "n": 134,
-        "precision": 0.9902912621359223,
-        "recall": 0.9026548672566371
+        "precision": 1.0,
+        "recall": 0.911504424778761
       },
       "ambiguity": {
         "lines": 8,
@@ -350,8 +392,8 @@
         "rate": 0.05970149253731343
       },
       "anchors": {
-        "no_true_anchor": 18,
-        "recovered": 92,
+        "no_true_anchor": 14,
+        "recovered": 88,
         "true_anchor_present": 74,
         "wrong": 0
       },
@@ -367,10 +409,9 @@
           "TN": 8
         },
         "headline": {
-          "FN": 5,
-          "FP": 1,
-          "TN": 12,
-          "TP": 96
+          "FN": 4,
+          "TN": 13,
+          "TP": 97
         },
         "unproven": {
           "TP": 2
@@ -385,43 +426,42 @@
         "C2": 9
       },
       "closed": 103,
-      "false_matches": [
-        {
-          "bank_line_id": "bl_9004",
-          "bucket": "headline",
-          "confidence": "exact",
-          "delta_paise": 0,
-          "injected_breaks": [
-            "DUPLICATE_CREDIT"
-          ],
-          "tier": "A1",
-          "truth_resolvable": false
-        }
-      ],
+      "excluded": {
+        "lines": [
+          "bl_9004",
+          "bl_9005",
+          "bl_9006",
+          "bl_9007",
+          "bl_9008",
+          "bl_9009"
+        ],
+        "pairs": 3,
+        "withheld_resolvable": []
+      },
+      "false_matches": [],
       "headline": {
         "counts": {
-          "FN": 5,
-          "FP": 1,
-          "TN": 12,
-          "TP": 96
+          "FN": 4,
+          "TN": 13,
+          "TP": 97
         },
         "n": 114,
-        "precision": 0.9896907216494846,
-        "recall": 0.9504950495049505
+        "precision": 1.0,
+        "recall": 0.9603960396039604
       },
       "ledger": {
-        "at_risk_paise": 64042877,
+        "at_risk_paise": 69894780,
         "by_type": {
           "AMBIGUOUS_CONSEQUENTIAL": 4,
           "AMBIGUOUS_EQUIVALENT": 4,
-          "DUPLICATE_CREDIT": 4,
+          "DUPLICATE_CREDIT": 6,
           "ORPHAN_ORDER": 6,
           "SETTLEMENT_CONTAMINATION": 3,
-          "SPLIT_PAYOUT": 9,
-          "UNIQUENESS_UNPROVEN": 3,
+          "SPLIT_PAYOUT": 6,
+          "UNIQUENESS_UNPROVEN": 4,
           "WITHHELD_RECORD": 7
         },
-        "documentation_paise": 74324092
+        "documentation_paise": 68472189
       },
       "open": 31,
       "propagation_passes_run": 2,
@@ -445,32 +485,11 @@
           "settlement_id": null
         },
         {
-          "amount_paise": 5851903,
-          "bank_line_id": "bl_0064",
-          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
-          "reason": "setl_0087 ties to this credit and bl_9009 jointly to the paisa, but 82 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
-          "settlement_id": "setl_0087"
-        },
-        {
           "amount_paise": 4763430,
           "bank_line_id": "bl_0036",
           "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
           "reason": "setl_0036 ties to this credit and bl_9001 jointly to the paisa, but 274 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
           "settlement_id": "setl_0036"
-        },
-        {
-          "amount_paise": 3652573,
-          "bank_line_id": "bl_0106",
-          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
-          "reason": "setl_0087 ties to this credit and bl_9005 jointly to the paisa, but 105 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
-          "settlement_id": "setl_0087"
-        },
-        {
-          "amount_paise": 3652573,
-          "bank_line_id": "bl_9005",
-          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
-          "reason": "setl_0087 ties to this credit and bl_0106 jointly to the paisa, but 105 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
-          "settlement_id": "setl_0087"
         },
         {
           "amount_paise": 3301418,
@@ -514,8 +533,8 @@
         "rate": 0.09701492537313433
       },
       "anchors": {
-        "no_true_anchor": 20,
-        "recovered": 101,
+        "no_true_anchor": 17,
+        "recovered": 98,
         "true_anchor_present": 81,
         "wrong": 0
       },
@@ -545,6 +564,18 @@
         "C2": 11
       },
       "closed": 101,
+      "excluded": {
+        "lines": [
+          "bl_9004",
+          "bl_9005",
+          "bl_9006",
+          "bl_9007",
+          "bl_9008",
+          "bl_9009"
+        ],
+        "pairs": 3,
+        "withheld_resolvable": []
+      },
       "false_matches": [],
       "headline": {
         "counts": {
@@ -557,18 +588,18 @@
         "recall": 0.9897959183673469
       },
       "ledger": {
-        "at_risk_paise": 56723918,
+        "at_risk_paise": 60853918,
         "by_type": {
-          "AMBIGUOUS_CONSEQUENTIAL": 4,
+          "AMBIGUOUS_CONSEQUENTIAL": 5,
           "AMBIGUOUS_EQUIVALENT": 8,
           "DUPLICATE_CREDIT": 6,
           "ORPHAN_ORDER": 6,
           "SETTLEMENT_CONTAMINATION": 3,
-          "SPLIT_PAYOUT": 7,
+          "SPLIT_PAYOUT": 6,
           "UNIQUENESS_UNPROVEN": 6,
           "WITHHELD_RECORD": 2
         },
-        "documentation_paise": 101292259
+        "documentation_paise": 97162259
       },
       "open": 33,
       "propagation_passes_run": 2,
@@ -583,13 +614,6 @@
           "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
           "reason": "setl_0065 ties to this credit and bl_9001 jointly to the paisa, but 313 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
           "settlement_id": "setl_0065"
-        },
-        {
-          "amount_paise": 4130000,
-          "bank_line_id": "bl_0041",
-          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
-          "reason": "2 settlements (setl_0085, setl_0106) tie to this credit and bl_9007 jointly to the paisa, but setl_0085 divides 42 ways, setl_0106 divides 130 and 130 ways, and the statement does not say which of them this credit carried",
-          "settlement_id": "setl_0085"
         },
         {
           "amount_paise": 4055647,
@@ -647,8 +671,8 @@
         "rate": 0.05223880597014925
       },
       "anchors": {
-        "no_true_anchor": 11,
-        "recovered": 93,
+        "no_true_anchor": 7,
+        "recovered": 89,
         "true_anchor_present": 82,
         "wrong": 0
       },
@@ -681,6 +705,18 @@
         "C2": 10
       },
       "closed": 105,
+      "excluded": {
+        "lines": [
+          "bl_9004",
+          "bl_9005",
+          "bl_9006",
+          "bl_9007",
+          "bl_9008",
+          "bl_9009"
+        ],
+        "pairs": 3,
+        "withheld_resolvable": []
+      },
       "false_matches": [],
       "headline": {
         "counts": {
@@ -776,8 +812,8 @@
         "rate": 0.08955223880597014
       },
       "anchors": {
-        "no_true_anchor": 21,
-        "recovered": 101,
+        "no_true_anchor": 17,
+        "recovered": 97,
         "true_anchor_present": 80,
         "wrong": 0
       },
@@ -809,6 +845,18 @@
         "C2": 11
       },
       "closed": 103,
+      "excluded": {
+        "lines": [
+          "bl_9004",
+          "bl_9005",
+          "bl_9006",
+          "bl_9007",
+          "bl_9008",
+          "bl_9009"
+        ],
+        "pairs": 3,
+        "withheld_resolvable": []
+      },
       "false_matches": [],
       "headline": {
         "counts": {
@@ -903,8 +951,8 @@
         "rate": 0.06716417910447761
       },
       "anchors": {
-        "no_true_anchor": 19,
-        "recovered": 98,
+        "no_true_anchor": 15,
+        "recovered": 94,
         "true_anchor_present": 79,
         "wrong": 0
       },
@@ -940,6 +988,18 @@
         "C3": 2
       },
       "closed": 103,
+      "excluded": {
+        "lines": [
+          "bl_9004",
+          "bl_9005",
+          "bl_9006",
+          "bl_9007",
+          "bl_9008",
+          "bl_9009"
+        ],
+        "pairs": 3,
+        "withheld_resolvable": []
+      },
       "false_matches": [],
       "headline": {
         "counts": {
@@ -952,18 +1012,18 @@
         "recall": 0.96
       },
       "ledger": {
-        "at_risk_paise": 95077040,
+        "at_risk_paise": 97057614,
         "by_type": {
           "AMBIGUOUS_CONSEQUENTIAL": 5,
           "AMBIGUOUS_EQUIVALENT": 4,
           "DUPLICATE_CREDIT": 6,
           "ORPHAN_ORDER": 6,
           "SETTLEMENT_CONTAMINATION": 4,
-          "SPLIT_PAYOUT": 5,
-          "UNIQUENESS_UNPROVEN": 7,
+          "SPLIT_PAYOUT": 4,
+          "UNIQUENESS_UNPROVEN": 8,
           "WITHHELD_RECORD": 4
         },
-        "documentation_paise": 69507655
+        "documentation_paise": 67527081
       },
       "open": 31,
       "propagation_passes_run": 2,
@@ -999,13 +1059,6 @@
           "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
           "reason": "setl_0094 ties to this credit and bl_0094 jointly across 26 transactions, but the division search exhausted the 250000 node budget (250001 nodes over a pool of 26)",
           "settlement_id": null
-        },
-        {
-          "amount_paise": 1980574,
-          "bank_line_id": "bl_0088",
-          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
-          "reason": "setl_0080 ties to this credit and bl_9005 jointly to the paisa, but 134 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
-          "settlement_id": "setl_0080"
         }
       ],
       "transactions": 3009,
@@ -1014,14 +1067,13 @@
     {
       "all_lines": {
         "counts": {
-          "FN": 8,
-          "FP": 1,
-          "TN": 22,
-          "TP": 103
+          "FN": 7,
+          "TN": 23,
+          "TP": 104
         },
         "n": 134,
-        "precision": 0.9903846153846154,
-        "recall": 0.9279279279279279
+        "precision": 1.0,
+        "recall": 0.9369369369369369
       },
       "ambiguity": {
         "lines": 10,
@@ -1029,8 +1081,8 @@
         "rate": 0.07462686567164178
       },
       "anchors": {
-        "no_true_anchor": 15,
-        "recovered": 99,
+        "no_true_anchor": 11,
+        "recovered": 95,
         "true_anchor_present": 84,
         "wrong": 0
       },
@@ -1046,10 +1098,9 @@
           "TN": 10
         },
         "headline": {
-          "FN": 2,
-          "FP": 1,
-          "TN": 12,
-          "TP": 98
+          "FN": 1,
+          "TN": 13,
+          "TP": 99
         },
         "unproven": {
           "TP": 1
@@ -1064,43 +1115,42 @@
         "C2": 12
       },
       "closed": 104,
-      "false_matches": [
-        {
-          "bank_line_id": "bl_9008",
-          "bucket": "headline",
-          "confidence": "exact",
-          "delta_paise": 0,
-          "injected_breaks": [
-            "DUPLICATE_CREDIT"
-          ],
-          "tier": "C1",
-          "truth_resolvable": false
-        }
-      ],
+      "excluded": {
+        "lines": [
+          "bl_9004",
+          "bl_9005",
+          "bl_9006",
+          "bl_9007",
+          "bl_9008",
+          "bl_9009"
+        ],
+        "pairs": 3,
+        "withheld_resolvable": []
+      },
+      "false_matches": [],
       "headline": {
         "counts": {
-          "FN": 2,
-          "FP": 1,
-          "TN": 12,
-          "TP": 98
+          "FN": 1,
+          "TN": 13,
+          "TP": 99
         },
         "n": 113,
-        "precision": 0.98989898989899,
-        "recall": 0.98
+        "precision": 1.0,
+        "recall": 0.99
       },
       "ledger": {
-        "at_risk_paise": 97218224,
+        "at_risk_paise": 90959108,
         "by_type": {
           "AMBIGUOUS_CONSEQUENTIAL": 6,
-          "AMBIGUOUS_EQUIVALENT": 3,
-          "DUPLICATE_CREDIT": 4,
+          "AMBIGUOUS_EQUIVALENT": 4,
+          "DUPLICATE_CREDIT": 6,
           "ORPHAN_ORDER": 6,
           "SETTLEMENT_CONTAMINATION": 3,
-          "SPLIT_PAYOUT": 8,
+          "SPLIT_PAYOUT": 6,
           "UNIQUENESS_UNPROVEN": 2,
-          "WITHHELD_RECORD": 7
+          "WITHHELD_RECORD": 6
         },
-        "documentation_paise": 44747015
+        "documentation_paise": 45353065
       },
       "open": 30,
       "propagation_passes_run": 2,
@@ -1150,20 +1200,6 @@
           "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
           "reason": "setl_0078 ties to this credit and bl_0078 jointly to the paisa, but 79 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
           "settlement_id": "setl_0078"
-        },
-        {
-          "amount_paise": 606050,
-          "bank_line_id": "bl_0118",
-          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
-          "reason": "2 settlements (setl_0069, setl_0072) tie to this credit and bl_9009 jointly to the paisa, but setl_0069 divides 10 ways, setl_0072 divides 26 ways, and the statement does not say which of them this credit carried",
-          "settlement_id": "setl_0069"
-        },
-        {
-          "amount_paise": 606050,
-          "bank_line_id": "bl_9009",
-          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
-          "reason": "2 settlements (setl_0069, setl_0072) tie to this credit and bl_0118 jointly to the paisa, but setl_0069 divides 10 ways, setl_0072 divides 26 ways, and the statement does not say which of them this credit carried",
-          "settlement_id": "setl_0069"
         }
       ],
       "transactions": 3009,
@@ -1186,8 +1222,8 @@
         "rate": 0.08955223880597014
       },
       "anchors": {
-        "no_true_anchor": 23,
-        "recovered": 97,
+        "no_true_anchor": 17,
+        "recovered": 91,
         "true_anchor_present": 74,
         "wrong": 0
       },
@@ -1222,6 +1258,18 @@
         "C3": 1
       },
       "closed": 99,
+      "excluded": {
+        "lines": [
+          "bl_9004",
+          "bl_9005",
+          "bl_9006",
+          "bl_9007",
+          "bl_9008",
+          "bl_9009"
+        ],
+        "pairs": 3,
+        "withheld_resolvable": []
+      },
       "false_matches": [],
       "headline": {
         "counts": {
@@ -1295,14 +1343,13 @@
     {
       "all_lines": {
         "counts": {
-          "FN": 11,
-          "FP": 1,
-          "TN": 15,
-          "TP": 107
+          "FN": 10,
+          "TN": 16,
+          "TP": 108
         },
         "n": 134,
-        "precision": 0.9907407407407407,
-        "recall": 0.9067796610169492
+        "precision": 1.0,
+        "recall": 0.9152542372881356
       },
       "ambiguity": {
         "lines": 3,
@@ -1310,8 +1357,8 @@
         "rate": 0.022388059701492536
       },
       "anchors": {
-        "no_true_anchor": 11,
-        "recovered": 89,
+        "no_true_anchor": 7,
+        "recovered": 85,
         "true_anchor_present": 78,
         "wrong": 0
       },
@@ -1327,10 +1374,9 @@
           "TN": 3
         },
         "headline": {
-          "FN": 5,
-          "FP": 1,
-          "TN": 12,
-          "TP": 103
+          "FN": 4,
+          "TN": 13,
+          "TP": 104
         }
       },
       "by_tier": {
@@ -1342,39 +1388,38 @@
         "C2": 13
       },
       "closed": 108,
-      "false_matches": [
-        {
-          "bank_line_id": "bl_9004",
-          "bucket": "headline",
-          "confidence": "exact",
-          "delta_paise": 0,
-          "injected_breaks": [
-            "DUPLICATE_CREDIT"
-          ],
-          "tier": "C1",
-          "truth_resolvable": false
-        }
-      ],
+      "excluded": {
+        "lines": [
+          "bl_9004",
+          "bl_9005",
+          "bl_9006",
+          "bl_9007",
+          "bl_9008",
+          "bl_9009"
+        ],
+        "pairs": 3,
+        "withheld_resolvable": []
+      },
+      "false_matches": [],
       "headline": {
         "counts": {
-          "FN": 5,
-          "FP": 1,
-          "TN": 12,
-          "TP": 103
+          "FN": 4,
+          "TN": 13,
+          "TP": 104
         },
         "n": 121,
-        "precision": 0.9903846153846154,
-        "recall": 0.9537037037037037
+        "precision": 1.0,
+        "recall": 0.9629629629629629
       },
       "ledger": {
         "at_risk_paise": 75087527,
         "by_type": {
           "AMBIGUOUS_CONSEQUENTIAL": 1,
           "AMBIGUOUS_EQUIVALENT": 1,
-          "DUPLICATE_CREDIT": 4,
+          "DUPLICATE_CREDIT": 6,
           "ORPHAN_ORDER": 6,
           "SETTLEMENT_CONTAMINATION": 3,
-          "SPLIT_PAYOUT": 8,
+          "SPLIT_PAYOUT": 6,
           "UNIQUENESS_UNPROVEN": 5,
           "WITHHELD_RECORD": 7
         },
@@ -1393,20 +1438,6 @@
           "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
           "reason": "setl_0063 ties to this credit and bl_9001 jointly to the paisa, but 103 divisions of the payout balance against this credit, and the statement does not say which of them this credit carried",
           "settlement_id": "setl_0063"
-        },
-        {
-          "amount_paise": 6787041,
-          "bank_line_id": "bl_0019",
-          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
-          "reason": "setl_0081 ties to this credit and bl_9005 jointly across 31 transactions, but the division search exhausted the 250000 node budget (250001 nodes over a pool of 31)",
-          "settlement_id": null
-        },
-        {
-          "amount_paise": 6787041,
-          "bank_line_id": "bl_9005",
-          "blocked_on": "A bank advice naming the transactions behind each credit: the payout ties out jointly to the paisa, and the statement does not record how it was divided.",
-          "reason": "setl_0081 ties to this credit and bl_0019 jointly across 31 transactions, but the division search exhausted the 250000 node budget (250001 nodes over a pool of 31)",
-          "settlement_id": null
         },
         {
           "amount_paise": 6014782,
@@ -1464,8 +1495,8 @@
         "rate": 0.08208955223880597
       },
       "anchors": {
-        "no_true_anchor": 16,
-        "recovered": 93,
+        "no_true_anchor": 12,
+        "recovered": 89,
         "true_anchor_present": 77,
         "wrong": 0
       },
@@ -1500,6 +1531,18 @@
         "C3": 4
       },
       "closed": 103,
+      "excluded": {
+        "lines": [
+          "bl_9004",
+          "bl_9005",
+          "bl_9006",
+          "bl_9007",
+          "bl_9008",
+          "bl_9009"
+        ],
+        "pairs": 3,
+        "withheld_resolvable": []
+      },
       "false_matches": [],
       "headline": {
         "counts": {
@@ -1553,17 +1596,17 @@
   "summary": {
     "all_lines_precision": {
       "max": 1.0,
-      "mean": 0.9971416618261278,
-      "min": 0.9902912621359223,
+      "mean": 1.0,
+      "min": 1.0,
       "n": 10,
-      "sigma": 0.004367472072986625
+      "sigma": 0.0
     },
     "all_lines_recall": {
       "max": 0.9523809523809523,
-      "mean": 0.9255198728027404,
-      "min": 0.9026548672566371,
+      "mean": 0.9281531870829725,
+      "min": 0.908256880733945,
       "n": 10,
-      "sigma": 0.01594528945545191
+      "sigma": 0.01423215296638944
     },
     "ambiguity_rate": {
       "max": 0.11940298507462686,
@@ -1579,49 +1622,77 @@
       "n": 10,
       "sigma": 2.4269322199023193
     },
-    "false_matches": {
-      "clean_on_every_seed": false,
-      "per_seed": {
+    "excluded": {
+      "costs_no_recall_on_any_seed": true,
+      "lines_per_seed": {
+        "1": 6,
+        "5": 6,
+        "7": 6,
+        "13": 6,
+        "23": 6,
+        "42": 6,
+        "99": 6,
+        "101": 6,
+        "777": 6,
+        "2026": 6
+      },
+      "withheld_resolvable_per_seed": {
         "1": 0,
         "5": 0,
-        "7": 1,
-        "13": 1,
+        "7": 0,
+        "13": 0,
         "23": 0,
         "42": 0,
         "99": 0,
-        "101": 1,
+        "101": 0,
         "777": 0,
         "2026": 0
       },
-      "total": 3
+      "withheld_resolvable_total": 0
+    },
+    "false_matches": {
+      "clean_on_every_seed": true,
+      "per_seed": {
+        "1": 0,
+        "5": 0,
+        "7": 0,
+        "13": 0,
+        "23": 0,
+        "42": 0,
+        "99": 0,
+        "101": 0,
+        "777": 0,
+        "2026": 0
+      },
+      "total": 0
     },
     "headline_precision": {
       "max": 1.0,
-      "mean": 0.9969974326933089,
-      "min": 0.9896907216494846,
+      "mean": 1.0,
+      "min": 1.0,
       "n": 10,
-      "sigma": 0.00458926074829913
+      "sigma": 0.0
     },
     "headline_recall": {
       "max": 1.0,
-      "mean": 0.9703342999315453,
+      "mean": 0.9732503248673721,
       "min": 0.9489795918367347,
       "n": 10,
-      "sigma": 0.0197480412816226
+      "sigma": 0.018950109156341963
     },
     "live_total_ablated_s": {
-      "max": 24.2,
-      "mean": 18.244999999999997,
-      "min": 12.46,
+      "max": 24.43,
+      "mean": 19.179,
+      "min": 12.09,
       "n": 10,
-      "sigma": 3.1062590040110947
+      "sigma": 3.243696810739253
     },
     "live_total_s": {
-      "max": 80.71,
-      "mean": 41.056,
-      "min": 14.99,
+      "max": 24.43,
+      "mean": 19.179,
+      "min": 12.09,
       "n": 10,
-      "sigma": 22.464354074844884
+      "sigma": 3.243696810739253
     }
   }
 }

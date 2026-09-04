@@ -138,10 +138,12 @@ def score(truth: Mapping, matched: Mapping[str, Iterable[str]]) -> Report:
     # Caught splits two ways and the split is not cosmetic. `caught_by_match` is a
     # composition proved to the paisa. `caught_by_refusal` is a line truth calls
     # unresolvable that nothing proposed — which scores identically and can be
-    # earned by having no rule at all. `DUPLICATE_CREDIT` is the live case: §3.2's
-    # reversal-pair rule is unimplemented, so every one of its lines is a green.
-    # A table that reported one number would show six greens for code that does
-    # not exist, and stage 14's regression would carry that forward silently.
+    # earned by having no rule at all. `DUPLICATE_CREDIT` was the live case: §3.2's
+    # reversal-pair rule ran only after matching, for typing, so all six lines were
+    # greens for code that did not decide anything. Stage 14's regression did not
+    # carry that forward silently — it carried it forward as three false matches on
+    # three seeds, and stage 15 promoted the rule to a pre-match exclusion. The
+    # split stays: its greens are still refusals, and this column is what says so.
     manifest = {}
     for code, entry in truth["break_manifest"].items():
         lines = carrying(code)
@@ -153,9 +155,10 @@ def score(truth: Mapping, matched: Mapping[str, Iterable[str]]) -> Report:
             "missed": len(lines) - by_match - by_refusal,
             "caught_by_match": by_match, "caught_by_refusal": by_refusal,
             # Every green earned by refusing. Correct for WITHHELD_RECORD, where
-            # refusal is §5's required outcome; unearned for DUPLICATE_CREDIT,
-            # where it is the absence of a rule. Scoring cannot tell those apart —
-            # exception typing is stage 10 — so it flags both and names neither.
+            # refusal is §5's required outcome, and now also for DUPLICATE_CREDIT,
+            # where stage 15's pre-match exclusion is what refuses. Scoring still
+            # cannot tell a rule's refusal from the absence of one — exception
+            # typing is stage 10 — so it flags both and names neither.
             "scored_by_refusal": by_match == 0 and by_refusal > 0,
             "no_bank_line": not lines,
         }
@@ -485,10 +488,11 @@ def render(report: Report, truth: Mapping, ladder: Run,
             "    refusal-only   every green came from refusing a line truth calls "
             "unresolvable, not",
             "                   from composing one. Required for WITHHELD_RECORD "
-            "(§5). Unearned for",
-            "                   DUPLICATE_CREDIT: §3.2's reversal-pair rule does not "
-            "exist, and its",
-            "                   absence scores the same as its success."]
+            "(§5), and earned for",
+            "                   DUPLICATE_CREDIT since stage 15: §3.2's "
+            "reversal-pair rule excludes both",
+            "                   halves before any tier proposes. It was three false "
+            "matches without it."]
     return "\n".join(out)
 
 

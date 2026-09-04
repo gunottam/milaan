@@ -4,7 +4,8 @@ Settlement reconciliation agent. Given a bank statement, a Razorpay gateway ledg
 order list, it determines what composes every bank line, proves it to the paisa, and refuses
 honestly when it cannot.
 
-Full spec: `docs/spec.md` (frozen v1.3). Narrative + worked example: `docs/workflow.md`.
+Full spec: `docs/spec.md` — frozen v1.3, **amended v1.3.1 at §18.1**. Read §18.1 before
+quoting §15's budget table or §3.2. Narrative + worked example: `docs/workflow.md`.
 Build stages: `docs/build-stages.md`. **Read only the spec sections a stage names.**
 
 ---
@@ -104,6 +105,14 @@ All four implement the same `Proposer` protocol and emit an identical frozen `Cl
 **Gates** (`matcher/gates.py`) approve them, in order:
 `G1` exclusivity → `G2` arithmetic → `G3` coherence → `G4` tolerance.
 
+**One pre-match exclusion**, in front of both layers (§3.2, §9.8, stage 15): a bank line with
+a T+1 equal-and-opposite counterpart is a duplicate posting and its contra, so no tier is
+offered either half. It is **not a gate** — it never sees a candidate, it decides what may be
+proposed on. `matcher/run.py` calls `matcher/ledger.py::reversal_pairs` with no second
+argument (every line); §10's typing pass calls the same function over the lines still open.
+Excluded lines land on `Run.excluded` and are **not** `EXCEEDED_SEARCH_BUDGET` — nothing ran
+out of time on them, they were never work.
+
 `check()` cannot tell which proposer produced a claim. That is the point — keep it that way.
 
 `G5` uniqueness lives in `matcher/uniqueness.py`, **not** in `check()`. It operates on the
@@ -122,6 +131,10 @@ Treat changes to it with suspicion.
 - **Do not treat the node budget as a performance knob.** It determines whether the
   uniqueness guarantee holds. Lowering it converts proven matches into `UNIQUENESS_UNPROVEN`.
 - **Do not add `source` to `Claim`** (I9), however useful it looks.
+- **Do not re-implement the reversal-pair rule, and do not move it into a gate.** One
+  function, two scopes (`reversal_pairs(lines)` pre-match, `reversal_pairs(lines, open_ids)`
+  for typing). As a gate it would sit downstream of a composition that should never have been
+  proposed, and `check()` would have to know why a line is not a payout.
 - **Do not skip arithmetic on an identifier match.** A clean UTR hit that does not balance is
   not a match (I8). `bl_06` in `docs/workflow.md` is the case.
 - **Do not absorb a delta into a "rounding adjustment"** outside G4's double cap.
@@ -134,28 +147,34 @@ Treat changes to it with suspicion.
 - **Do not scaffold future stages.** Build only the stage you were given.
 - **Do not write excessive comments.** Docstrings on public functions; skip narration.
 
-## Open, measured, not fixed (stage 14)
+## Where the numbers stand (stage 15)
 
-Both were found by the ten-seed regression and neither is in the committed board's numbers.
-`docs/journal/stage-14.md` has the arithmetic.
+`regression.json` is measured against the current matcher. `docs/journal/stage-15.md` has the
+arithmetic; stage 14's table is superseded and must not be quoted.
 
-- **Precision is 100.0% on nine of ten seeds, not ten.** Seeds 7, 13 and 101 each book one
-  false match, all `DUPLICATE_CREDIT`: the duplicate posting carries a byte-identical
-  narration and ref_no, so a tier composes the settlement against whichever of the two lines
-  the §9.8 sort reaches first. The fix is one monotonically-restrictive rule reusing
-  `matcher/ledger.py::reversal_pairs` before the ladder runs — a credit reversed on T+1 by an
-  equal and opposite debit is not a payout.
-- **§15's Phase D budget is not enforceable as written.** The run deadline is checked between
-  tiers and before each line, so it bounds every search tier; a batching tier does its work in
-  `prepare()` and a batch in flight cannot be interrupted. The live run can therefore enter D1
-  legally at 21.9 s of a 22,000 ms deadline and return well past 60 s — measured at 33.8 s to
-  80.7 s on the six seeds where the model answered, against 12.5 – 24.2 s ablated. Phase D
-  closed zero extra lines on all ten seeds.
+- **Precision is 100.0% ± 0.0% on all ten seeds, 0 false matches.** Stage 14's three FP were
+  all `DUPLICATE_CREDIT` and the pre-match exclusion removed them. All-lines recall
+  **92.82% ± 1.42%**, headline **97.33% ± 1.90%**. The exclusion withheld 6 lines per seed —
+  exactly the injected pairs, no collateral on any seed — and recall *rose*, because the
+  transactions the duplicate consumed went back to the line that earned them.
+- **§15's Phase D budget is not enforceable as written** — amended in the spec (v1.3.1)
+  rather than fixed. The run deadline is checked between tiers and before each line, so it
+  bounds every search tier; a batching tier does its work in `prepare()` and a batch in
+  flight cannot be interrupted. Measured at 33.8 – 80.7 s with the model answering against
+  12.5 – 24.2 s ablated. **Phase D closed zero extra lines on all ten seeds, so the demo runs
+  `use_llm: false`** and the 60 s ceiling is asserted for that configuration only.
 - **Groq's free tier caps tokens per day at 200,000**, and a ten-seed live pass exhausts it.
   A 429 is counted as a call, so `usage.calls > 0` does not mean the pass ran — read
   `detective_hypotheses` and `detective_unavailable` (`scoring/regression.py`) or the D-tier
-  refusal strings. The committed `regression.json` predates that field: its four zero-cost
-  live rows were rate-limited, not fast.
+  refusal strings. Stage 15's `regression.json` runs the live pass ablated by default, so its
+  `live s` column has no model in it at all.
+
+## Open, measured, not fixed
+
+- **Enforcing §15's Phase D allocation** would need a per-tier deadline and a cancellable
+  client, so `prepare()` abandons in-flight batches. Not built: D closes nothing, so the
+  budget it would enforce is one nobody wants to spend. §15's v1.3.1 amendment states both
+  options and which one ships.
 
 ## Style
 
