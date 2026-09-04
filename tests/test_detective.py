@@ -453,3 +453,39 @@ def test_a_misconfigured_provider_degrades_instead_of_crashing_the_board(monkeyp
     assert d.refusals[line.bank_line_id].startswith("DETECTIVE_UNAVAILABLE")
     assert "gorq" in d.refusals[line.bank_line_id]
     assert d.usage.malformed == 0
+
+
+def test_a_utr_in_the_settlement_id_field_still_resolves():
+    """Found on the first live Groq run, and it cost 37 correct readings.
+
+    `openai/gpt-oss-120b` copies the UTR into `settlement_id` — schema-valid and
+    semantically confused. The old precedence was positional (trust
+    `settlement_id`, fall back to the UTR only when null), so the bogus id won over
+    the good UTR sitting beside it and every reading became malformed.
+
+    Both fields are now resolved and whichever lands on a real settlement wins.
+    """
+    txns = [payment("pay_1", 100_000, "setl_a", UTR),
+            payment("pay_2", 50_000, "setl_a", UTR)]
+    d = detective("D1", txns, {"readings": [{
+        "bank_line_id": "bl_0001", "claim": "narration_parse",
+        "extracted_utr": UTR, "settlement_id": UTR,   # the model's confusion
+        "reasoning": "read the UTR"}]})
+    line = bank_line(sum(t.net for t in txns))
+    d.prepare([line], {"bl_0001": txns})
+
+    assert d.recovered_anchors == {"bl_0001": {"setl_a"}}
+    assert d.usage.malformed == 0
+    assert d.propose(line, txns)[0].anchor_settlement_id == "setl_a"
+
+
+def test_neither_identifier_field_can_launder_an_invented_string():
+    """The tolerance above must not become a way in. Whatever an anchor resolves
+    to still has to be a settlement that exists in the export."""
+    txns = [payment("pay_1", 100_000, "setl_a", UTR)]
+    d = detective("D1", txns, {"readings": [{
+        "bank_line_id": "bl_0001", "claim": "direct_link",
+        "extracted_utr": "NHDFC26999900001", "settlement_id": "setl_imaginary",
+        "reasoning": "confident"}]})
+    d.prepare([bank_line(1)], {})
+    assert d.recovered_anchors == {} and d.usage.malformed == 1

@@ -52,6 +52,12 @@ HDFC0000060, and the NEFT template includes it on every line. It identifies the 
 branch, not the payment. So does a bare NHDFC with no digits after it. Neither is a \
 UTR.
 
+Two identifier fields, and they are not the same thing. extracted_utr is the UTR \
+you read from the text, repaired if you repaired it. settlement_id is a separate \
+internal identifier of the form setl_0042 — it appears in a narration only rarely, \
+written out literally. If the narration carries no setl_ token, settlement_id is \
+null. Do not copy the UTR into it.
+
 You are reading text, not solving arithmetic. You are given no amounts and no \
 transaction records, because ~30% of these narrations are unparseable by regular \
 expressions and that is a pure text problem — candidate records would add nothing to \

@@ -93,21 +93,29 @@ RATES: dict[str, dict[str, Rates]] = {
         "claude-haiku-4-5": Rates(1_000_000, 5_000_000),
     },
     "groq": {
-        # Groq's catalogue and prices rotate faster than this repository does.
-        # Treat every row as a config value to re-check, not a constant.
+        # Groq's catalogue and prices rotate faster than this repository does, and
+        # that is not hypothetical: the first live call of stage 12b got a 404 on
+        # `llama-3.3-70b-versatile`, which had been the default. Treat every row
+        # here as a config value to re-check against `GET /models`, not a constant.
+        "openai/gpt-oss-120b": Rates(150_000, 750_000),
+        "openai/gpt-oss-20b": Rates(100_000, 500_000),
+        # Retained for accounts that still serve them. An unlisted or unavailable
+        # model does not fail silently: an absent rate prices at ₹0.00 visibly,
+        # and an absent *model* is a reported failure, not a crash.
         "llama-3.3-70b-versatile": Rates(590_000, 790_000),
         "llama-3.1-8b-instant": Rates(50_000, 80_000),
-        "openai/gpt-oss-120b": Rates(150_000, 750_000),
         "moonshotai/kimi-k2-instruct": Rates(1_000_000, 3_000_000),
     },
 }
 UNKNOWN_RATES = Rates(0, 0)
 
-# Groq's default. A 70B instruct model is the right shape for this job: both passes
-# are extraction against a fixed schema rather than open-ended reasoning, and the
-# cheaper 8B model is measurably worse at holding a nested schema. Override with
-# `GROQ_MODEL`.
-GROQ_DEFAULT_MODEL = "llama-3.3-70b-versatile"
+# Groq's default, **chosen against the catalogue this account actually serves**
+# rather than from memory — `llama-3.3-70b-versatile` 404s here. Both passes are
+# extraction against a fixed schema rather than open-ended reasoning, so a large
+# instruct model is the right shape; the 20b variant is in the table above for
+# anyone trading accuracy for cost. Override with `GROQ_MODEL`, and check
+# `GET /openai/v1/models` first — the catalogue moves.
+GROQ_DEFAULT_MODEL = "openai/gpt-oss-120b"
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 ANTHROPIC_DEFAULT_MODEL = "claude-opus-5"
 MAX_TOKENS = 16_000
@@ -273,6 +281,40 @@ class GroqProvider:
         self._client = OpenAI(api_key=key, base_url=GROQ_BASE_URL)
         return self._client
 
+    def _messages_with_schema(self, messages: Sequence[dict],
+                              schema: dict) -> list[dict]:
+        """Append the schema to the system turn. **Two reasons, both Groq's.**
+
+        1. `response_format: {"type": "json_object"}` is rejected with a 400 unless
+           the messages contain the word "json" somewhere — an OpenAI-compatible
+           quirk Groq enforces. Found on the first live call.
+        2. More importantly: JSON mode sends the server *no schema at all*. The
+           Anthropic path hands `output_config.format` a `json_schema` and the API
+           constrains the response to it; here the only way the model can know the
+           shape is to be told, in the prompt. `validate_or_salvage()` is the
+           enforcement, but a validator that rejects everything is not a feature —
+           the prompt is what gives it something valid to accept.
+
+        This is exactly the vendor-specific translation the boundary exists to
+        hold. `AnthropicProvider` must not do it: passing a schema twice, once
+        properly and once as prose, is how prompts and contracts drift apart.
+        """
+        instruction = (
+            "\n\nReturn a single JSON object and nothing else — no prose, no code "
+            "fence. It must validate against this JSON Schema exactly: every "
+            "required field present, no additional properties, types as given.\n\n"
+            + json.dumps(schema, sort_keys=True))
+        out, injected = [], False
+        for message in messages:
+            if message.get("role") == "system" and not injected:
+                out.append({**message, "content": message["content"] + instruction})
+                injected = True
+            else:
+                out.append(dict(message))
+        if not injected:
+            out.insert(0, {"role": "system", "content": instruction.strip()})
+        return out
+
     def complete(self, messages: Sequence[dict], schema: dict, *,
                  effort: str = "medium") -> Completion:
         """One chat completion, JSON mode, then validated against `schema` here.
@@ -285,7 +327,7 @@ class GroqProvider:
         try:
             response = client.chat.completions.create(
                 model=self.model,
-                messages=list(messages),
+                messages=self._messages_with_schema(messages, schema),
                 max_tokens=MAX_TOKENS,
                 temperature=0,
                 response_format={"type": "json_object"},

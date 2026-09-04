@@ -85,10 +85,12 @@ class FakeGroqClient:
         return _Response()
 
 
+PRICED_MODEL = "openai/gpt-oss-120b"
+
+
 def groq(body, **kw) -> GroqProvider:
     text = body if isinstance(body, str) else json.dumps(body)
-    return GroqProvider(client=FakeGroqClient(text, **kw),
-                        model="llama-3.3-70b-versatile")
+    return GroqProvider(client=FakeGroqClient(text, **kw), model=PRICED_MODEL)
 
 
 MESSAGES = [{"role": "system", "content": "sys"}, {"role": "user", "content": "u"}]
@@ -121,8 +123,14 @@ def test_an_unknown_provider_is_an_error_not_a_silent_default(monkeypatch):
 
 
 def test_the_groq_model_comes_from_env_with_a_default(monkeypatch):
+    """The default is asserted against the constant rather than a literal: it
+    changed once already when the previous default 404'd, and a test pinning the
+    old string would have failed for the wrong reason."""
+    from detective.provider import GROQ_DEFAULT_MODEL
+
     monkeypatch.delenv("GROQ_MODEL", raising=False)
-    assert GroqProvider().model == "llama-3.3-70b-versatile"
+    assert GroqProvider().model == GROQ_DEFAULT_MODEL
+    assert GROQ_DEFAULT_MODEL in RATES["groq"], "the default must be priced"
     monkeypatch.setenv("GROQ_MODEL", "llama-3.1-8b-instant")
     assert GroqProvider().model == "llama-3.1-8b-instant"
 
@@ -140,10 +148,53 @@ def test_groq_pins_temperature_to_zero_and_asks_for_json():
 
     assert sent["temperature"] == 0
     assert sent["response_format"] == {"type": "json_object"}
-    assert sent["messages"] == MESSAGES, "system turn passes through, not lifted"
     assert "effort" not in sent and "output_config" not in sent, (
         "effort is accepted and ignored — inventing a vendor feature would be "
         "worse than ignoring a hint")
+
+    roles = [m["role"] for m in sent["messages"]]
+    assert roles == ["system", "user"], "the system turn stays a turn, not a param"
+    assert sent["messages"][1] == MESSAGES[1], "the user turn is untouched"
+
+
+def test_groq_carries_the_schema_in_the_system_turn():
+    """Two Groq constraints, both found on the first live call.
+
+    `json_object` mode is rejected with a 400 unless the messages contain the word
+    "json" — and, more importantly, it sends the server *no schema*. The Anthropic
+    path hands `output_config.format` a real `json_schema`; here the only way the
+    model can know the shape is to be told. `validate_or_salvage()` is the
+    enforcement; this is what gives it something valid to accept.
+    """
+    p = groq({"readings": []})
+    p.complete(MESSAGES, PASS_A_SCHEMA)
+    system = p._client.calls[0]["messages"][0]["content"]
+
+    assert system.startswith("sys"), "the caller's system prompt comes first"
+    assert "json" in system.lower(), "or Groq rejects response_format with a 400"
+    assert '"additionalProperties": false' in system
+    assert '"readings"' in system, "the actual schema, not a description of one"
+
+
+def test_anthropic_does_not_repeat_the_schema_as_prose():
+    """The mirror of the test above. Passing a schema twice — once properly and
+    once as prose — is how prompts and contracts drift apart, so the path that has
+    server-side enforcement must not also narrate it."""
+    class FakeAnthropic:
+        def __init__(self): self.messages = self; self.calls = []
+        def create(self, **kw):
+            self.calls.append(kw)
+            class _B: type, text = "text", '{"readings": []}'
+            class _U:
+                input_tokens, output_tokens, cache_read_input_tokens = 1, 1, 0
+            class _R:
+                content, usage, stop_reason = [_B()], _U(), "end_turn"
+            return _R()
+
+    client = FakeAnthropic()
+    AnthropicProvider(client=client, model="claude-opus-5").complete(
+        MESSAGES, PASS_A_SCHEMA)
+    assert client.calls[0]["system"][0]["text"] == "sys", "verbatim, no schema"
 
 
 def test_groq_uses_the_openai_compatible_base_url(monkeypatch):
@@ -264,14 +315,14 @@ def test_cost_is_integer_paise_from_per_provider_rates():
     """I1, and the point of putting rates in config: the same token counts price
     differently per vendor, and neither figure is computed outside `provider.py`."""
     tokens = (1_000_000, 100_000)
-    groq_rate = RATES["groq"]["llama-3.3-70b-versatile"]
+    groq_rate = RATES["groq"][PRICED_MODEL]
     anthropic_rate = RATES["anthropic"]["claude-opus-5"]
 
     cheap = groq_rate.cost_paise(*tokens)
     dear = anthropic_rate.cost_paise(*tokens)
     assert isinstance(cheap, int) and isinstance(dear, int)
-    # $0.59/MTok in, $0.79/MTok out, at ₹88.00 = 5,192 and 6,952 paise per MTok.
-    assert cheap == 5_192 + 695
+    # $0.15/MTok in, $0.75/MTok out, at ₹88.00 = 1,320 and 6,600 paise per MTok.
+    assert cheap == 1_320 + 660
     # $5/$25 per MTok = 44,000 and 220,000 paise per MTok.
     assert dear == 44_000 + 22_000
     assert dear > cheap * 8, "the swap is a real change in the cost picture"
@@ -280,7 +331,7 @@ def test_cost_is_integer_paise_from_per_provider_rates():
 def test_the_provider_prices_its_own_call():
     p = groq({"readings": []}, prompt_tokens=1_000_000, completion_tokens=100_000)
     done = p.complete(MESSAGES, PASS_A_SCHEMA)
-    assert done.cost_paise == RATES["groq"]["llama-3.3-70b-versatile"].cost_paise(
+    assert done.cost_paise == RATES["groq"][PRICED_MODEL].cost_paise(
         1_000_000, 100_000)
     assert done.input_tokens == 1_000_000 and done.output_tokens == 100_000
 

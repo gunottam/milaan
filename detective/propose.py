@@ -258,13 +258,22 @@ class DetectiveProposer:
         for h in hypotheses:
             settlement_id = h.settlement_id
             if h.kind in ("narration_parse", "direct_link"):
-                # Pass A's product is an anchor. A repaired UTR is resolved against
-                # the export here — the model names a string, not a settlement, and
-                # a string that matches nothing is a malformed hypothesis rather
-                # than an anchor nobody can use.
-                if settlement_id is None and h.extracted_utr:
-                    settlement_id = self._utr_to_settlement.get(h.extracted_utr)
-                if settlement_id is None or settlement_id not in self._settlements:
+                # Pass A's product is an anchor. Both identifier fields are
+                # resolved against the export, and **whichever lands on something
+                # real wins** — the model names strings, not settlements.
+                #
+                # The precedence used to be positional: trust `settlement_id`, fall
+                # back to the UTR only when it was null. A live Groq run broke
+                # that. `openai/gpt-oss-120b` copies the *UTR* into
+                # `settlement_id`, which is schema-valid and semantically confused
+                # — and the old code took the bogus id over the good UTR sitting
+                # right beside it, so 37 correct readings became malformed
+                # hypotheses. Resolving both and preferring what exists is
+                # tolerant of that without accepting anything unverifiable: an
+                # anchor still has to be a settlement in the export.
+                settlement_id = (self._as_settlement(h.settlement_id)
+                                 or self._as_settlement(h.extracted_utr))
+                if settlement_id is None:
                     malformed += 1
                     continue
                 members = tuple(sorted(
@@ -304,6 +313,19 @@ class DetectiveProposer:
 
         self.usage += Usage(malformed=malformed)
         return claims
+
+    def _as_settlement(self, token: str | None) -> str | None:
+        """A settlement id, a UTR, or nothing. Never a guess.
+
+        Accepts either identifier shape because models mix them up, and returns
+        `None` for anything absent from the export — which is what keeps this a
+        resolver rather than a way to launder an invented string into an anchor.
+        """
+        if not token:
+            return None
+        if token in self._settlements:
+            return token
+        return self._utr_to_settlement.get(token)
 
     @property
     def _settlements(self) -> frozenset[str]:
@@ -384,13 +406,18 @@ class DetectiveProposer:
         try:
             if self.name == "D1":
                 found = self.run_pass_a(lines)
+                # **One resolver, called from both places.** This block used to
+                # carry its own copy of the identifier precedence, which is why the
+                # `settlement_id`-holds-a-UTR bug appeared twice and was fixed once:
+                # `to_claims` rejected the reading while `recovered_anchors` handed
+                # C1 the bogus string. Two implementations of one rule is the root
+                # cause, not the two symptoms.
                 for h in found:
-                    if h.settlement_id or h.extracted_utr:
-                        sid = h.settlement_id or self._utr_to_settlement.get(
-                            h.extracted_utr or "")
-                        if sid:
-                            self.recovered_anchors.setdefault(
-                                h.bank_line_id, set()).add(sid)
+                    sid = (self._as_settlement(h.settlement_id)
+                           or self._as_settlement(h.extracted_utr))
+                    if sid:
+                        self.recovered_anchors.setdefault(
+                            h.bank_line_id, set()).add(sid)
             else:
                 found = self.run_pass_b(lines, pools, round_no)
         except NoCredentials as exc:
