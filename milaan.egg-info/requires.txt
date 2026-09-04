@@ -1,0 +1,16 @@
+jsonschema>=4.0
+python-dotenv>=1.0
+
+[anthropic]
+anthropic>=0.60
+
+[api]
+fastapi>=0.110
+uvicorn>=0.27
+
+[detective]
+openai>=1.40
+
+[test]
+pytest>=8.0
+httpx2>=2.0

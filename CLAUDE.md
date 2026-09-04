@@ -11,6 +11,23 @@ Build stages: `docs/build-stages.md`. **Read only the spec sections a stage name
 
 ## Verify before claiming done
 
+**Run the suite inside `.venv`, and install it from `pyproject.toml` first.** The
+venv has drifted twice — both times on packages nothing in this repo imports by
+name (`httpx2`, which `starlette.testclient` needs; `jsonschema`, which the Groq
+validator needs), and both times three test modules failed at *collection*, which
+reads as broken tests rather than a broken environment. Numbers measured on the
+system interpreter and numbers measured in the venv are not comparable, and stage
+14's are the ones that go on a slide.
+
+```bash
+source .venv/bin/activate
+pip install -e '.[detective,anthropic,api,test]'   # the declaration is the truth
+python -c "import dotenv, jsonschema, openai, anthropic, fastapi, httpx2"
+```
+
+There is no `groq` package. Groq speaks the OpenAI wire format, so its client is
+the OpenAI SDK with a `base_url` override — installing one hides the fact.
+
 ```bash
 pytest -q                        # 17 s fast sweep — green before any stage is complete
 pytest -q -m slow                # ~6 min, the 134-line seed-42 board. See below

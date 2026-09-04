@@ -122,7 +122,8 @@ def build_tiers(txns: Sequence[GatewayTxn], window_days: int = 2, *,
                 detective: bool = False) -> list:
     """The ladder, in order. Separate from `run_ladder` so a caller can measure one
     tier's reach by handing back a prefix of it — which is how stage 8 scores C1
-    alone against the prediction stage 7 registered for it.
+    alone against the prediction stage 7 registered for it. **Take that prefix with
+    `tiers_through`, by name, never by slicing this list** — see its docstring.
 
     **`detective=False` is the ablation, and it is a filter over the tier list
     rather than a special case anywhere else** (§7.2). Nothing in the verification
@@ -150,6 +151,29 @@ def build_tiers(txns: Sequence[GatewayTxn], window_days: int = 2, *,
         tiers += [DetectiveProposer("D1", txns, window_days),
                   DetectiveProposer("D2", txns, window_days)]
     return tiers
+
+
+def tiers_through(txns: Sequence[GatewayTxn], last: str, window_days: int = 2, *,
+                  detective: bool = False) -> list:
+    """`build_tiers` cut off *after the tier named `last`* — "the ladder through B2".
+
+    **A positional slice of the tier list is a magic number that absorbs a new
+    tier silently.** Three test modules measured one phase by taking
+    `build_tiers(...)[:5]` with a comment saying `A1..B2`; the comment was the
+    intent and the `5` was the code, and the two agree only until somebody inserts
+    a tier. Stage 13 hit the benign end of that: `[:7]` kept excluding C2's
+    successor after C3 was added, so the slow set went green on a board C3 had
+    never run — a fixture that silently excluded the thing under test. The
+    dangerous end is an insert *before* the boundary, which would drop an existing
+    tier and leave every count in those files still plausible.
+
+    Unknown names raise. A renamed tier should be a failure, not a shorter ladder.
+    """
+    tiers = build_tiers(txns, window_days, detective=detective)
+    names = [t.name for t in tiers]
+    if last not in names:
+        raise ValueError(f"no tier named {last!r} in the ladder {names}")
+    return tiers[:names.index(last) + 1]
 
 
 def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],

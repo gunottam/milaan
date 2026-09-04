@@ -19,6 +19,12 @@ dependencies = ["jsonschema>=4.0", "python-dotenv>=1.0"]
 detective = ["openai>=1.40"]
 anthropic = ["anthropic>=0.60"]
 api = ["fastapi>=0.110", "uvicorn>=0.27"]
+# `httpx2` is not imported anywhere here — `starlette.testclient` needs it, and
+# without it `tests/test_api.py` fails at *collection*, which reads as a broken
+# test module rather than a missing package. It is listed because the venv has now
+# drifted twice, and both times the missing pieces were things nothing in this
+# repo imports by name.
+test = ["pytest>=8.0", "httpx2>=2.0"]
 
 [build-system]
 requires = ["setuptools>=68"]

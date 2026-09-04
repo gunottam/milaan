@@ -19,7 +19,7 @@ from core.models import BankLine, GatewayTxn
 from core.subsetsum import C2_MAX_POOL
 from matcher.proposers.base import Claim
 from matcher.proposers.search_p import SearchProposer
-from matcher.run import build_tiers, run_ladder
+from matcher.run import run_ladder, tiers_through
 from matcher.uniqueness import resolve
 from matcher.verify import check
 from scoring.score import recall, score
@@ -29,28 +29,34 @@ DAY = "2026-01-05"
 BEFORE = "2026-01-01"          # outside a 2-day window ending on DAY
 
 
-def _score(seed42, n_tiers):
+def _score(seed42, last_tier):
     generated, truth = seed42
     r = run_ladder(generated.txns, generated.bank_lines,
-                   tiers=build_tiers(generated.txns)[:n_tiers], deadline_ms=None)
+                   tiers=tiers_through(generated.txns, last_tier), deadline_ms=None)
     report = score(truth, {b: c.composition for b, (_, c, _) in r.matched.items()})
     return r.matched, r.trace, report
 
 
 @pytest.fixture(scope="session")
 def with_c1(seed42):
-    return _score(seed42, 6)
+    return _score(seed42, "C1")
 
 
 @pytest.fixture(scope="session")
 def full(seed42):
     """The ladder through C2 — Phase C as it stood before stage 13.
 
-    Deliberately not `build_tiers(...)` entire: C3 is the eighth tier and this
-    module's counts are the baseline its delta is measured against. `test_split.py`
-    pins the ladder including it.
+    Deliberately not the whole ladder: C3 is the eighth tier and this module's
+    counts are the baseline its delta is measured against. `test_split.py` pins the
+    ladder including it.
+
+    **The boundary is named, not counted.** This fixture spent stage 13 as
+    `build_tiers(...)[:7]`, which is how the slow set went green on a board C3 had
+    never run — the number was written when C2 was last and stayed correct-looking
+    after it was not. `tiers_through(txns, "C2")` cannot make that mistake, and it
+    raises if C2 is ever renamed instead of quietly running a shorter ladder.
     """
-    return _score(seed42, 7)
+    return _score(seed42, "C2")
 
 
 # --- the two registered predictions ------------------------------------------

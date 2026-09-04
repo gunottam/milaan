@@ -255,9 +255,52 @@ and clicking a closed row expands the arithmetic.
 > the offline budget**. A change that moves seed 42 and nothing else passes the first and
 > fails the second.
 >
+> **Run the suite inside `.venv`, installed from `pyproject.toml`** — see CLAUDE.md. The venv
+> has drifted twice and both times three test modules failed at *collection*, on packages
+> nothing in the repo imports by name. Stage 14's numbers are the ones that go on a slide, and
+> a number from the system interpreter is not the same number.
+>
+> **Carried over from stage 13, and it is required, not optional: score a `SPLIT_PAYOUT` pair
+> as a pair.** Truth already carries `split_partner`. The current per-line rule compares each
+> half's composition to truth's half, and `docs/journal/stage-13.md` measured that the input
+> does not determine the halves — `setl_0019`'s payout admits 6 divisions balancing its
+> credit and `setl_0048`'s admits 279, and truth asserts one of them by construction. So the
+> rule penalises the matcher for not knowing an attribution the data does not contain, which
+> is not a matcher failure and is not a thing recall should measure.
+>
+> The replacement: for a line whose truth record has `split_partner`, TP iff the agent's
+> composition **unioned with its composition for the partner** equals truth's union of the
+> two, and the agent asserted the pair. **Stricter, not laxer** — every wrong composition is
+> still FP and the union is exact — it only stops scoring the one thing the statement never
+> recorded. C3 has to change with it: where the payout is proved and the division is not, it
+> must commit *some* balanced division rather than refuse, because a refused line contributes
+> no composition to any union.
+>
+> **It is worth 2 TP on seed 42, not 6, and the reason is a second ambiguity that pair
+> scoring cannot forgive.** Measured on the committed board:
+>
+> | pair | distinct payouts C3 proposes | divisions of it | union rule reads |
+> |---|---|---|---|
+> | `bl_0048` + `bl_9003` | **1** | 279 | **2 TP** — the union is determined |
+> | `bl_0019` + `bl_9002` | **2** | 6 | refuse — `rfnd_00560` and `rfnd_00567` both net −₹499.00, so *which* stray the payout netted is undetermined and the two unions differ |
+> | `bl_0101` + `bl_9001` | **2** | 1 | refuse — same, `rfnd_02558` vs `rfnd_02564` at −₹999.00 |
+>
+> So the honest figure is **1 TP → 2 TP**, and note `bl_0101` *loses* its per-line TP: the
+> pair it belongs to is ambiguous at the payout level even though its own half is not. The
+> residual ambiguity is §6.2's ordinary repeated pricing, not a split-payout artefact, and
+> forgiving it would mean guessing which of two identical refunds the bank netted — a false
+> match half the time by construction. Reading 6 requires exactly that guess. Do not.
+>
+> It is here rather than in stage 13 because changing the scoring rule in the same commit as
+> the tier the rule rewards is not a measurement. Ten seeds visible is the moment: report
+> both figures side by side for at least one seed so the change is legible as a change, and
+> say in `regression.json` which rule produced the numbers.
+>
 > Then stop building. Rehearse the live-seed run until it cannot fail.
 
-**Done when:** `pytest -q -m slow` is green (~6 min), `regression.json` shows mean ± σ recall
-across ten seeds, and three consecutive live runs on judge-chosen seeds complete inside 60 s.
+**Done when:** `pytest -q` and `pytest -q -m slow` are green **inside `.venv`** (~6 min),
+pair-scored `SPLIT_PAYOUT` is in and reported beside the per-line figure, `regression.json`
+shows mean ± σ recall across ten seeds, and three consecutive live runs on judge-chosen seeds
+complete inside 60 s.
 
 `git commit -m "stage 14: offline regression, freeze"`

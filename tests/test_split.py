@@ -232,7 +232,14 @@ def test_a_settlement_already_claimed_is_not_offered_as_an_anchor():
 
 @pytest.fixture(scope="session")
 def with_c3(seed42):
-    """The whole ladder including C3, uncapped, plus Phase E over what it proved."""
+    """The whole ladder including C3, uncapped, plus Phase E over what it proved.
+
+    **`build_tiers(...)` entire, deliberately, and not `tiers_through(..., "C3")`.**
+    The scoped fixtures elsewhere are baselines and must name their boundary; this
+    one is "the ladder as shipped", so a ninth tier has to land inside it and move
+    these numbers visibly. Pinning it to C3 would reproduce the stage-13 bug one
+    tier along — a fixture that silently excludes the thing under test.
+    """
     generated, truth = seed42
     run = run_ladder(generated.txns, generated.bank_lines,
                      tiers=build_tiers(generated.txns), deadline_ms=None)

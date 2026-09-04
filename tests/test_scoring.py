@@ -14,7 +14,7 @@ import pytest
 from core.models import BANK_COLUMNS, BankLine, GatewayTxn, read_csv
 from generator.config import UNIQUENESS_NODE_BUDGET_OFFLINE
 from generator.generate import emit
-from matcher.run import Run, build_tiers, run_ladder
+from matcher.run import Run, run_ladder, tiers_through
 from scoring.score import (BUCKETS, anchors_recovered, bucket, budget_banner,
                            outcome, phase_e, precision, recall, render, score)
 
@@ -250,10 +250,11 @@ def baseline(seed42):
     # scoreboard's committed run uses the 40M offline budget. `budget_banner` is
     # what says so at the top of the board.
     assert truth["config"]["uniqueness_node_budget"] == 2_000_000
-    # A1..B2 only. Phase C is stage 8's; this fixture is stage 7's measurement and
-    # stays that way, so a change to C moves `test_phase_c.py` and not this file.
+    # Through B2 only. Phase C is stage 8's; this fixture is stage 7's measurement
+    # and stays that way, so a change to C moves `test_phase_c.py` and not this
+    # file. Named rather than sliced — see `tiers_through`.
     r = run_ladder(data.txns, data.bank_lines,
-                   tiers=build_tiers(data.txns)[:5], deadline_ms=None)
+                   tiers=tiers_through(data.txns, "B2"), deadline_ms=None)
     compositions = {b: c.composition for b, (_, c, _) in r.matched.items()}
     return data, truth, r.matched, r.trace, score(truth, compositions)
 

@@ -14,7 +14,7 @@ import pytest
 from core.models import BankLine, GatewayTxn, target
 from matcher.proposers.lookup_p import LookupProposer
 from matcher.proposers.regex_p import RegexProposer
-from matcher.run import build_tiers, run_ladder
+from matcher.run import run_ladder, tiers_through
 from matcher.uniqueness import resolve
 from matcher.verify import check
 from tests.test_invariants import grep
@@ -27,11 +27,13 @@ def run(seed42):
     # The 2M budget only changes how many truth records read "unproven"; the CSVs
     # it describes are the same bytes the 40M offline run emits.
     data, truth = seed42
-    # A1..B2. Phase C runs in `test_phase_c.py`; this file measures Phase A and B.
+    # Phase C runs in `test_phase_c.py`; this file measures Phase A and B, so the
+    # ladder stops at B2 — **named, not sliced.** A positional prefix is a magic
+    # number that absorbs a new tier silently; `tiers_through` says the boundary.
     # `deadline_ms=None` is node budget only — §11's reproducible mode. A wall
     # clock would make every count in this file a property of the machine.
     r = run_ladder(data.txns, data.bank_lines,
-                   tiers=build_tiers(data.txns)[:5], deadline_ms=None)
+                   tiers=tiers_through(data.txns, "B2"), deadline_ms=None)
     return data, truth, r.matched, r.trace
 
 

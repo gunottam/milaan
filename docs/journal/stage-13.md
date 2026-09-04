@@ -309,10 +309,31 @@ not ask: nobody needs to know which of `setl_0048`'s 30 transactions sat behind
 which of two same-day credits from the same bank, because every one of them is tied
 out, to the paisa, on the same settlement and the same date, whichever way it is
 booked. Scoring the *pair* — the agent's union across both lines against truth's
-union — would read 6 TP and would still catch a wrong composition as FP, because
-`split_partner` is already in the truth record and the union is exact.
+union — still catches a wrong composition as FP, because `split_partner` is already
+in the truth record and the union is exact. It is stricter than the per-line rule,
+not laxer; it simply stops scoring the one thing the statement never recorded.
 
-I did not do it in this stage. Changing the scoring rule in the same commit that
-adds the tier the rule would reward is how a measurement stops being one, and it
-belongs in the regression stage with all ten seeds visible rather than here with
-one. Recording it as an open question and the number it would produce.
+**It is worth two lines, not six, and I checked before writing the number down.**
+The division is not the only thing undetermined here — for two of the three pairs
+the *payout* is undetermined too, because two identical refunds each compose the
+cross-cycle residual:
+
+| pair | distinct payouts | divisions of it | union rule reads |
+|---|---|---|---|
+| `bl_0048` + `bl_9003` | **1** | 279 | **2 TP** |
+| `bl_0019` + `bl_9002` | **2** — `rfnd_00560` / `rfnd_00567`, both −₹499.00 | 6 | refuse |
+| `bl_0101` + `bl_9001` | **2** — `rfnd_02558` / `rfnd_02564`, both −₹999.00 | 1 | refuse |
+
+So 1 TP → 2 TP, and `bl_0101` *loses* the TP it has today: its own half is
+determined but the pair it belongs to is not. Reading 6 needs a guess about which
+of two identical refunds the bank netted, which is a false match half the time by
+construction — §6.2's ordinary repeated pricing, and nothing pair scoring may
+forgive.
+
+The rule should still change, because 1 TP is measuring the wrong thing whatever
+the replacement scores. It is queued on stage 14 (`docs/build-stages.md`) with the
+numbers above, alongside the C3 change it needs: a refused line contributes no
+composition to any union, so where the payout is proved and only the division is
+not, C3 has to commit some balanced division rather than refuse. Not in this stage —
+changing the scoring rule in the same commit that adds the tier the rule rewards is
+how a measurement stops being one.
