@@ -399,7 +399,7 @@ def test_the_ablation_is_a_filter_over_the_tier_list():
     from matcher.run import build_tiers
 
     plain = [t.name for t in build_tiers([])]
-    assert plain == ["A1", "A2", "A3", "B1", "B2", "C1", "C2"]
+    assert plain == ["A1", "A2", "A3", "B1", "B2", "C1", "C2", "C3"]
     with_model = [t.name for t in build_tiers([], detective=True)]
     assert with_model == plain + ["D1", "D2"]
 

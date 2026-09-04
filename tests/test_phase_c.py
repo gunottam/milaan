@@ -44,6 +44,12 @@ def with_c1(seed42):
 
 @pytest.fixture(scope="session")
 def full(seed42):
+    """The ladder through C2 — Phase C as it stood before stage 13.
+
+    Deliberately not `build_tiers(...)` entire: C3 is the eighth tier and this
+    module's counts are the baseline its delta is measured against. `test_split.py`
+    pins the ladder including it.
+    """
     return _score(seed42, 7)
 
 
@@ -114,9 +120,15 @@ def test_the_full_ladder_closes_99_of_134(full):
     `bl_0083` and `bl_0102`, both `TIMING_SHIFT` with a 6-character truncated UTR
     that `FRAGMENT_RX` refused to emit; stage 11 widened it and both close at C1.
 
-    The 8 remaining FN are all in the disclosed buckets, not the headline: 6 are
-    `SPLIT_PAYOUT` halves waiting on C3 (stage 13) and 8 sit in `unproven`, whose
-    denominator is a property of the 2M fixture budget rather than of the matcher.
+    The remaining FN are all in the disclosed buckets, not the headline: 6 are
+    `SPLIT_PAYOUT` halves, and the rest sit in `unproven`, whose denominator is a
+    property of the 2M fixture budget rather than of the matcher.
+
+    **This is now the pre-C3 baseline, and the name is kept for that reason.**
+    Stage 13 added an eighth tier; the ladder through it closes 100 and takes one
+    of the six halves (`test_split.py`). Re-pointing this fixture at
+    `build_tiers(...)` entire would have moved the number a stage-13 delta is
+    measured against, which is the one thing a baseline may not do.
     """
     matched, _, report = full
     assert len(matched) == 88 + 7 + 4        # headline TP + unproven TP + B2 singles

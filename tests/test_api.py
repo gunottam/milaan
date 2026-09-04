@@ -119,12 +119,20 @@ def test_every_closed_line_carries_the_arithmetic_that_closed_it(report):
 
 
 def test_provenance_is_on_the_result_never_on_the_claim(report):
-    """I9. `source` is output-only, and until stage 12 every match is deterministic
-    — reported as such rather than left absent, because absent and 'deterministic'
-    render identically and mean different things."""
+    """I9. `source` is output-only, and this fixture runs the ablated configuration
+    — every match is deterministic, reported as such rather than left absent,
+    because absent and 'deterministic' render identically and mean different things.
+
+    `detective_available` is deliberately not asserted. It reads whether this box
+    holds credentials, which is a property of the machine and not of the method
+    (§11) — it was `False` until stage 12a put a provider behind the tier and a key
+    in `.env`, and pinning it made the suite pass or fail on whose laptop ran it.
+    What this test is about is that no hypothesis reached the board, and
+    `detective_ran` is the field that says so.
+    """
     assert {row["source"] for row in report["closed_lines"]} == {"deterministic"}
     assert report["via_hypothesis"] == 0
-    assert report["ablation"]["detective_available"] is False
+    assert report["ablation"]["detective_ran"] is False
     assert report["ablation"]["full_recall"] is None
 
 

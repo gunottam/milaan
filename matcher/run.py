@@ -35,6 +35,7 @@ from matcher.proposers.base import Claim
 from matcher.proposers.lookup_p import LookupProposer
 from matcher.proposers.regex_p import RegexProposer
 from matcher.proposers.search_p import SearchProposer
+from matcher.proposers.split_p import SplitProposer
 from matcher.uniqueness import finalists, resolve
 from matcher.verify import Verdict, check
 
@@ -128,7 +129,12 @@ def build_tiers(txns: Sequence[GatewayTxn], window_days: int = 2, *,
     layer changes between the two configurations; the recall difference between them
     is §11's ablation delta.
 
-    D1 and D2 sit after C2, which is §12's phase order (`phase_c` then
+    C3 closes Phase C (§9.3). It is last there because a pair is only worth
+    searching over what nothing else could close: every line C1 or C2 takes out of
+    the residue is a line C3 never has to consider pairing, and its cost is
+    quadratic in what is left.
+
+    D1 and D2 sit after C3, which is §12's phase order (`phase_c` then
     `detective_a`, `detective_b`). Pass A's recovered anchors are handed to C1 and
     pay off on the second propagation pass — §9.1's amendment, and the reason the
     ablation delta understates Pass A.
@@ -137,7 +143,8 @@ def build_tiers(txns: Sequence[GatewayTxn], window_days: int = 2, *,
              RegexProposer("A3", txns), LookupProposer("B1", txns, window_days),
              LookupProposer("B2", txns, window_days),
              SearchProposer("C1", txns, window_days),
-             SearchProposer("C2", txns, window_days)]
+             SearchProposer("C2", txns, window_days),
+             SplitProposer(txns, window_days)]
     if detective:
         from detective.propose import DetectiveProposer
         tiers += [DetectiveProposer("D1", txns, window_days),
@@ -150,7 +157,7 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                deadline_ms: int | None = MATCH_DEADLINE_MS,
                passes: int = PROPAGATION_PASSES,
                on_tier: Callable[[str, int, int], None] | None = None) -> Run:
-    """A1 → A2 → A3 → B1 → B2 → C1 → C2, twice, under one clock.
+    """A1 → A2 → A3 → B1 → B2 → C1 → C2 → C3, twice, under one clock.
 
     `deadline_ms=None` disables the clock and leaves the node budget as the only
     bound. That is the reproducible mode: §11 requires the regression harness to

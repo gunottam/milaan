@@ -28,7 +28,7 @@ from matcher.proposers.search_p import SearchProposer
 from matcher.run import PROPAGATION_PASSES, Run, run_ladder
 from scoring.score import anchors_recovered, phase_e, render, score
 
-LADDER = ("A1", "A2", "A3", "B1", "B2", "C1", "C2")
+LADDER = ("A1", "A2", "A3", "B1", "B2", "C1", "C2", "C3")
 
 
 def _board(data, truth, ladder: Run) -> str:
@@ -149,6 +149,14 @@ def test_propagation_pass_two_is_a_replay_on_this_data(twice):
     one candidate in pass 2 with no pool change at all. Seeds 42, 7, 99 and 2026
     never fire it. Stage 14's 10-seed regression is where this either earns its
     4 seconds or gets deleted.
+
+    **Stage 13 ended the byte-for-byte replay.** C3 closes `bl_0101`, and that is
+    the first closure on this board to remove a transaction from a *different*
+    line's window pool — `bl_0100` shares the cycle, and one transaction lighter
+    its C2 search finds two solutions in pass 2 where it found none in pass 1. So
+    §9.8's mechanism is demonstrably live on seed 42 now. Its payoff is still
+    zero: G5 refuses both solutions and nothing closes. The movement is pinned
+    exactly rather than tolerated, because the next one is a finding and not noise.
     """
     _, _, (run, _) = twice
     assert run.passes_run == PROPAGATION_PASSES == 2
@@ -159,8 +167,9 @@ def test_propagation_pass_two_is_a_replay_on_this_data(twice):
     second = {(s["line"], s["tier"]): s["candidates"]
               for s in run.trace if s["pass"] == 2}
     assert second, "pass 2 ran no lines at all — the loop is not what is being tested"
-    assert all(first[k] == v for k, v in second.items()), \
-        "a candidate count moved between the passes; propagation is live, re-measure"
+    moved = {k: (first.get(k), v) for k, v in second.items() if first.get(k) != v}
+    assert moved == {("bl_0100", "C2"): (0, 2)}, \
+        f"a candidate count moved between the passes that stage 13 did not: {moved}"
 
 
 # --- the deadline, §9.10 -----------------------------------------------------

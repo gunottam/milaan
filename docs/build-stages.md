@@ -226,7 +226,7 @@ and clicking a closed row expands the arithmetic.
 
 ---
 
-## [ ] Stage 13 — C3 pairwise split
+## [x] Stage 13 — C3 pairwise split
 
 > Read `@docs/spec.md` section 9.3, tier C3. For each unmatched settlement, test whether any
 > two unmatched bank lines in the window jointly sum to its total.

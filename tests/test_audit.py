@@ -329,7 +329,7 @@ def test_every_exception_is_typed_priced_and_aged(board):
     ledger, _ = board
     kinds = {"WITHHELD_RECORD", "AMBIGUOUS_EQUIVALENT", "AMBIGUOUS_CONSEQUENTIAL",
              "UNIQUENESS_UNPROVEN", "EXCEEDED_SEARCH_BUDGET", "DUPLICATE_CREDIT",
-             "SETTLEMENT_CONTAMINATION", "ORPHAN_ORDER"}
+             "SETTLEMENT_CONTAMINATION", "ORPHAN_ORDER", "SPLIT_PAYOUT"}
     for exc in ledger.exceptions:
         assert exc.exception_type in kinds
         assert exc.type_confidence in ("high", "medium", "low")
@@ -405,10 +405,12 @@ def test_the_orders_tie_out_finds_a_paid_order_with_no_payment():
 
 def test_the_sort_is_the_one_ten_point_two_asks_for(board):
     """`WITHHELD_RECORD` and `AMBIGUOUS_CONSEQUENTIAL` first by amount descending;
-    `AMBIGUOUS_EQUIVALENT` last, because it is a documentation task."""
+    `AMBIGUOUS_EQUIVALENT` and `SPLIT_PAYOUT` last, because both are documentation
+    tasks — the money is accounted for and what is missing is a note in a file."""
     ledger, _ = board
     tiers = [0 if e.exception_type in ("WITHHELD_RECORD", "AMBIGUOUS_CONSEQUENTIAL")
-             else 2 if e.exception_type == "AMBIGUOUS_EQUIVALENT" else 1
+             else 2 if e.exception_type in ("AMBIGUOUS_EQUIVALENT", "SPLIT_PAYOUT")
+             else 1
              for e in ledger.exceptions]
     assert tiers == sorted(tiers)
     first = [e.amount_at_risk_paise for e, t in zip(ledger.exceptions, tiers) if t == 0]

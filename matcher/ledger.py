@@ -43,7 +43,7 @@ AGE_BUCKETS = ((2, "0-2d"), (7, "3-7d"), (30, "8-30d"), (None, ">30d"))
 # §10.2's sorting. Three tiers: the two types that cost money and need
 # investigation, then everything else, then the documentation task last.
 FIRST = ("WITHHELD_RECORD", "AMBIGUOUS_CONSEQUENTIAL")
-LAST = ("AMBIGUOUS_EQUIVALENT",)
+LAST = ("AMBIGUOUS_EQUIVALENT", "SPLIT_PAYOUT")
 
 # Is the amount on this row money the books cannot account for, or a figure that
 # needs a note in a file? **Summing the two together produces a number that is
@@ -66,10 +66,20 @@ LAST = ("AMBIGUOUS_EQUIVALENT",)
 #                            G3 accepted the shape, G2 balanced it. The flag asks a
 #                            human to confirm a tagging, and the amount is what a
 #                            repair would move, not what is unaccounted for.
+#   SPLIT_PAYOUT             C3 proved the settlement against the two credits
+#                            jointly, to the paisa. Every transaction behind the
+#                            money is identified and nothing is missing; what is
+#                            undetermined is which of the two credits carried which
+#                            of them, and the pair contributes exactly zero to
+#                            §9.7's gap because both sides of the subtraction hold
+#                            it. Two rows, one payout — the face value here is the
+#                            whole payout counted twice, which is another reason it
+#                            is not a risk figure.
 #
 # Everything else is genuinely unaccounted for and defaults to `at_risk`, so a new
 # type is treated as money until someone argues otherwise.
-DOCUMENTATION = ("DUPLICATE_CREDIT", "AMBIGUOUS_EQUIVALENT", "SETTLEMENT_CONTAMINATION")
+DOCUMENTATION = ("DUPLICATE_CREDIT", "AMBIGUOUS_EQUIVALENT", "SETTLEMENT_CONTAMINATION",
+                 "SPLIT_PAYOUT")
 
 
 def risk_class(exception_type: str) -> str:
@@ -223,8 +233,8 @@ def _confidence(draft: _Draft) -> str:
 
 def _sort_key(draft: _Draft) -> tuple:
     """§10.2's ordering: `WITHHELD_RECORD` and `AMBIGUOUS_CONSEQUENTIAL` first by
-    amount descending, `AMBIGUOUS_EQUIVALENT` last because it is a documentation
-    task, everything else between. `bank_line_id` makes the order total, which is
+    amount descending, `AMBIGUOUS_EQUIVALENT` and `SPLIT_PAYOUT` last because both
+    are documentation tasks, everything else between. `bank_line_id` makes the order total, which is
     what makes the rendered ledger reproducible."""
     tier = (0 if draft.exception_type in FIRST
             else 2 if draft.exception_type in LAST else 1)
@@ -333,14 +343,22 @@ def _type_open_line(line: BankLine, steps: Sequence[Mapping], deadline_cut: bool
 
     The order is the order of certainty, not of severity:
 
-    1. **G5 tied** — the tie is a fact in the trace, and the alternatives are
+    1. **C3 found the pair** — the strongest structural fact any tier can hand
+       this function short of a match: a named settlement that ties to this credit
+       and one other jointly, to the paisa. It outranks the G5 tie below even though
+       the two describe the same event, because "half of a split payout" says what
+       the line *is* and "two compositions tied" says only that a rule declined.
+       Before C3 existed these lines came through as `UNIQUENESS_UNPROVEN` and
+       `WITHHELD_RECORD` — a refusal wearing a label that sends a human looking for
+       a record that is not missing.
+    2. **G5 tied** — the tie is a fact in the trace, and the alternatives are
        recorded. Split by book shape (§10.1).
-    2. **A tier refused to search** — it said why, in the refusal string, and the
+    3. **A tier refused to search** — it said why, in the refusal string, and the
        string already carries the type (`UNIQUENESS_UNPROVEN` or
        `EXCEEDED_SEARCH_BUDGET`). Reading it rather than re-deriving it is what
        keeps the ledger and `search_p` from disagreeing about what happened.
-    3. **The deadline never reached the line** — §9.10's `exceeded`.
-    4. **Nothing else** — a gap with no reachable composition, which is §10.1's
+    4. **The deadline never reached the line** — §9.10's `exceeded`.
+    5. **Nothing else** — a gap with no reachable composition, which is §10.1's
        definition of `WITHHELD_RECORD`. This is the residual class and it is where
        the delta diagnostics earn their place: without them the record would say
        "a source record is absent" with nothing behind it.
@@ -374,6 +392,46 @@ def _type_open_line(line: BankLine, steps: Sequence[Mapping], deadline_cut: bool
         draft.evidence.append(
             "The pair nets to zero, so it adds nothing to the residue gap")
         draft.delta_diagnosis = "reversed_by_pair"
+        return draft
+
+    # 1. C3's pair, before the tie it produced — see the docstring's ordering.
+    split = next((step["unproven"] for step in steps
+                  if (step["unproven"] or "").startswith("SPLIT_PAYOUT")), None)
+    if split is not None:
+        alternatives = next((step["tied"] for step in steps
+                             if step["tier"] == "C3" and step["tied"]), [])
+        draft = _Draft(
+            line.bank_line_id, "SPLIT_PAYOUT", at_risk, age_days,
+            blocked_on=("A bank advice naming the transactions behind each credit: "
+                        "the payout ties out jointly to the paisa, and the "
+                        "statement does not record how it was divided."),
+            proposed_action={
+                "kind": "human_documentation",
+                "detail": ("Book the settlement against both credits as one payout; "
+                           "the division between them changes no figure in the "
+                           "books.")},
+            hypotheses_tried=tried, tokens=3,
+            # C3's own anchor, not `anchors[0]`. That set is every settlement any
+            # tier recovered for this line, and A3's prefix cascade contributes
+            # candidates it could not close — on `bl_9001` it puts `setl_0000`
+            # first alphabetically while the payout is `setl_0101`. The claim C3
+            # actually built is the one this record is about. It is empty only on
+            # the path where C3 refused before proposing anything (a division past
+            # `C2_MAX_POOL` or out of node budget), and there the evidence sentence
+            # below still names the settlement.
+            settlement_id=next((s for step in steps if step["tier"] == "C3"
+                                for s in step["anchors"]), None))
+        draft.evidence.append(split.split(": ", 1)[-1])
+        if alternatives:
+            draft.evidence.append(
+                f"{len(alternatives)} sets of the payout's transactions balance "
+                f"against this credit exactly; G5 withdrew approval rather than "
+                f"pick one")
+        draft.evidence.append(
+            "Nothing is unaccounted for — the pair contributes zero to the residue "
+            "gap, because the payout sits on one side of §9.7's subtraction and "
+            "both credits on the other")
+        draft.delta_diagnosis = "split_across_two_credits"
         return draft
 
     tied = next((step["tied"] for step in steps if step.get("tied")), [])

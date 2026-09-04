@@ -36,6 +36,21 @@ def g1_exclusivity(claim: Claim, line: BankLine, txns: Mapping[str, GatewayTxn],
     id is known, membership is a fact rather than an inference (§9.3), which is what
     makes an on-hold release settled outside the window recoverable at C1 at all.
     This is the one place G1 is deliberately less restrictive than the window rule.
+
+    **`joint_with` is checked, but not for exclusivity.** The partner half of a
+    split payout (C3) is cited so G3 can judge the whole payout, never spent: it
+    has to exist, sit in the window and stay clear of `composition`, and it must
+    arrive with an anchor, because a joint claim with no settlement behind it is
+    two numbers that happen to add up. It is deliberately *not* run through the
+    `claimed` test — the partner line legitimately claims that half, so by the time
+    the second of the two reaches the gate chain the first has already spent it,
+    and rejecting there would refuse a pair on the strength of its own success.
+    Nothing is double-spent by the exemption: G2 sums `composition` alone, the
+    ladder adds `composition` alone to `claimed`, and §9.7's residue partition
+    reads compositions. The cost of a wrong `joint_with` is a G3 approval on a
+    premise G1 could not check — exactly the standing `anchor_settlement_id`
+    already has, and the reason C3 asserts one only after it has found the whole
+    payout and balanced it against both credits.
     """
     composition = claim.composition
     if not composition:
@@ -45,13 +60,20 @@ def g1_exclusivity(claim: Claim, line: BankLine, txns: Mapping[str, GatewayTxn],
     if not 0 <= claim.window_days <= MAX_WINDOW_OVERRIDE_DAYS:
         return (f"window of {claim.window_days} days is outside the permitted "
                 f"0-{MAX_WINDOW_OVERRIDE_DAYS}")
+    if claim.joint_with:
+        if claim.anchor_settlement_id is None:
+            return "joint claim names no settlement it is half of"
+        both = sorted(set(claim.joint_with) & set(composition))
+        if both:
+            return f"joint_with and composition both cite {', '.join(both)}"
 
     anchor = window_key(line.value_date, line.txn_date)
-    for entity_id in composition:
+    spent = set(composition)
+    for entity_id in (*composition, *claim.joint_with):
         txn = txns.get(entity_id)
         if txn is None:
             return f"unknown entity {entity_id}"
-        if entity_id in claimed:
+        if entity_id in claimed and entity_id in spent:
             return f"entity {entity_id} is already claimed"
         if (claim.anchor_settlement_id is not None
                 and txn.settlement_id == claim.anchor_settlement_id):
@@ -84,13 +106,20 @@ def g3_coherence(claim: Claim, txns: Mapping[str, GatewayTxn]) -> str | None:
     A prior, not a proof. If it is wrong it rejects correct answers and costs
     recall; it cannot admit a wrong one. The reason string counts groups only to
     say *why* — the decision is the shared function's.
+
+    **The question is asked of the payout, not of the bank line.** For a split
+    payout (C3) that is `composition + joint_with`; everywhere else `joint_with` is
+    empty and this is the composition, unchanged. Half of a split credit is a
+    partial slice of one settlement and this gate refuses it — which is right, and
+    is why the pair needs to be expressible at all.
     """
-    if is_plausible_payout(claim.composition, txns):
+    payout = (*claim.composition, *claim.joint_with)
+    if is_plausible_payout(payout, txns):
         return None
-    if not claim.composition:
+    if not payout:
         return "empty composition"
-    groups = {txns[e].settlement_id for e in claim.composition} - {None}
-    strays = sum(1 for e in claim.composition if txns[e].settlement_id is None)
+    groups = {txns[e].settlement_id for e in payout} - {None}
+    strays = sum(1 for e in payout if txns[e].settlement_id is None)
     return (f"spans {len(groups)} settlements and {strays} unassigned items; "
             "not the shape of a payout")
 

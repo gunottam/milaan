@@ -35,7 +35,8 @@ from matcher.run import MATCH_DEADLINE_MS, Run, build_tiers, run_ladder
 BUCKETS = {
     "headline": "verified-unique lines, plus refusals on lines nobody rigged",
     "unproven": "uniqueness: unproven — composition known, uniqueness is not",
-    "by_construction_c3": "SPLIT_PAYOUT halves — FN until C3 lands in stage 13",
+    "by_construction_c3": "SPLIT_PAYOUT halves — C3 closes the ones whose "
+                          "division the input determines",
     "by_construction_single": "single-transaction payouts — B2's, no search needed",
     "emergent": "AMBIGUOUS_SUBSET — the true-negative class, G5's only evidence",
     "excluded": "excluded_from_scoring — removed from every denominator (§11)",
@@ -407,7 +408,7 @@ def render(report: Report, truth: Mapping, ladder: Run,
            f"{len(matched)} closed · {cfg['bank_lines'] - len(matched)} open",
            "  by tier   " + "  ".join(f"{t} {tiers.get(t, 0)}"
                                       for t in ("A1", "A2", "A3", "B1", "B2",
-                                                "C1", "C2")),
+                                                "C1", "C2", "C3")),
            *search_summary(trace),
            f"  anchors recovered {anchors['recovered']} "
            f"(true anchor present {anchors['true_anchor_present']}, "
