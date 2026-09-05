@@ -6,6 +6,11 @@
 // names one of them names it correctly. This is not pedantry: a screen that says
 // "99 of 134 reconciled" leaves a reader unable to tell whether 35 payouts or 35
 // payments are unexplained, and those differ by two orders of magnitude in money.
+//
+// **The open column is not the leftovers.** It is half the argument — this closed,
+// this did not, and the second is as much the product as the first — so it gets the
+// wider half of the grid and is never behind a filter tab. A refusal a reader has
+// to click a control to reach is a refusal they record as a miss.
 
 import { Fragment, useState } from 'react'
 import { fmtInr, fmtBare, fmtDate } from './money'
@@ -16,6 +21,38 @@ import { fmtInr, fmtBare, fmtDate } from './money'
 // nobody knew to make. Twenty rows fills the column, and the first strip renders
 // open so the arithmetic is on screen before anybody touches anything.
 const FIRST_SCREEN = 20
+
+// §10.2's order, as a render order. The ledger already sorts its rows; this is the
+// grouping the sort produces, named, so a reader can see *why* the list is in the
+// order it is instead of scanning an unlabelled sequence of types and concluding it
+// is arbitrary. Anything not listed falls to the end in ledger order.
+const TYPE_ORDER = ['WITHHELD_RECORD', 'AMBIGUOUS_CONSEQUENTIAL',
+                    'EXCEEDED_SEARCH_BUDGET', 'UNIQUENESS_UNPROVEN',
+                    'ORPHAN_ORDER', 'SETTLEMENT_CONTAMINATION',
+                    'DUPLICATE_CREDIT', 'AMBIGUOUS_EQUIVALENT']
+
+// One line per type, because "WITHHELD_RECORD" is a token and a subhead is a place
+// to say what it means. Kept short enough to sit on the same rule as the count.
+const TYPE_GLOSS = {
+  WITHHELD_RECORD: 'a source record is absent — the gap can be sized, not attributed',
+  AMBIGUOUS_CONSEQUENTIAL: 'more than one composition balances and they book differently',
+  EXCEEDED_SEARCH_BUDGET: 'the clock stopped the search — not a statement about the data',
+  UNIQUENESS_UNPROVEN: 'a composition was found; the node budget could not prove it unique',
+  ORPHAN_ORDER: 'an ERP order with no gateway record (§3.3)',
+  SETTLEMENT_CONTAMINATION: 'the match spans settlements — confirm the tagging',
+  DUPLICATE_CREDIT: 'a posting and its T+1 contra — the pair nets to zero',
+  AMBIGUOUS_EQUIVALENT: 'the alternatives post identical figures — book either',
+}
+
+function groupByType(rows) {
+  const seen = new Map()
+  for (const exc of rows) {
+    if (!seen.has(exc.exception_type)) seen.set(exc.exception_type, [])
+    seen.get(exc.exception_type).push(exc)
+  }
+  return [...seen.entries()].sort(
+    (a, b) => (TYPE_ORDER.indexOf(a[0]) + 1 || 99) - (TYPE_ORDER.indexOf(b[0]) + 1 || 99))
+}
 
 // --- the proof strip -------------------------------------------------------
 
@@ -92,7 +129,26 @@ export function ProofStrip({ row }) {
 
 // --- CLOSED ----------------------------------------------------------------
 
-function Closed({ rows }) {
+// The per-tier census, shown when provenance is on. §9.8's whole argument is that
+// the ladder runs strongest-evidence-first, and this is the only place a reader can
+// see that it did: 40 lines closed on a hard identifier before the search tiers ran
+// at all. Scanning a column of two-character tier codes does not make that visible.
+function TierStrip({ rows }) {
+  const counts = rows.reduce((acc, r) => ({ ...acc, [r.tier]: (acc[r.tier] || 0) + 1 }), {})
+  const tiers = Object.keys(counts).sort()
+  return (
+    <div className="tier-strip">
+      {tiers.map((t) => (
+        <span key={t} className="tier-cell">
+          <span className={`tier-key t${t[0]}`}>{t}</span>
+          <span className="tier-n">{counts[t]}</span>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function Closed({ rows, provenance, partial }) {
   // The first row's strip is open on arrival. §11.1: in production the proof strip
   // is what a human verifies *instead of* precision, so it is the claim the board
   // is making — and a claim behind a click is a claim nobody sees.
@@ -105,13 +161,15 @@ function Closed({ rows }) {
         <span className="eyebrow">Closed</span>
         <span className="eyebrow">{rows.length} bank lines</span>
       </div>
+      {provenance && rows.length > 0 && <TierStrip rows={rows} />}
       {rows.length === 0 && <p className="empty">No bank line has been closed yet.</p>}
-      <table className="ledger">
+      <table className={`ledger${provenance ? ' provenance' : ''}`}>
         <tbody>
           {shown.map((row, i) => (
             <Row key={row.bank_line_id}
                  row={row} index={i} tint={i % 2 === 1}
-                 open={open === row.bank_line_id}
+                 provenance={provenance}
+                 open={!partial && open === row.bank_line_id}
                  onToggle={() => setOpen(open === row.bank_line_id ? null : row.bank_line_id)} />
           ))}
         </tbody>
@@ -131,7 +189,7 @@ function Closed({ rows }) {
 // the proof <tr> is a *sibling* of the data <tr> — §13's "expands in place, no
 // modal" is a structural claim, and a screenshot cannot distinguish a strip
 // that is missing from one that is merely closed.
-export function Row({ row, index, tint, open, onToggle }) {
+export function Row({ row, index, tint, open, onToggle, provenance }) {
   return (
     <>
       {/* The greenbar tint comes from the row's index in the data, not from
@@ -150,7 +208,7 @@ export function Row({ row, index, tint, open, onToggle }) {
         <td className="tick">{row.delta_paise === 0 ? '✓' : '~'}</td>
         <td className="eid">{row.bank_line_id}</td>
         <td className="num amount">{fmtInr(row.target_paise)}</td>
-        <td className="tier">
+        <td className={`tier${provenance ? ` keyed t${row.tier[0]}` : ''}`}>
           {row.tier}
           {row.confidence === 'tolerance' && <span className="tol"> tol</span>}
           {row.flags?.length > 0 && <span className="flag-mark"> ⚑</span>}
@@ -186,9 +244,9 @@ function ExceptionDetail({ exc }) {
   )
 }
 
-function ExceptionRows({ rows, open, setOpen }) {
+function ExceptionRows({ rows, open, setOpen, risk }) {
   return (
-    <table className="ledger">
+    <table className={`ledger exceptions ${risk}`}>
       <tbody>
         {rows.map((exc, i) => {
           const isOpen = open === exc.exception_id
@@ -201,19 +259,19 @@ function ExceptionRows({ rows, open, setOpen }) {
                     && setOpen(isOpen ? null : exc.exception_id)}>
                 <td className="caret">{isOpen ? '▾' : '▸'}</td>
                 <td className="num amount">{fmtInr(exc.amount_at_risk_paise)}</td>
-                <td className="exc-type">
-                  {exc.exception_type}
+                <td className="eid">{exc.bank_line_id ?? '—'}</td>
+                <td className="exc-meta">
                   {/* A reversal pair is one finding across two bank lines. Naming
                       the partner on the row is what stops each half reading as an
                       unexplained credit on its own (§3.2). */}
-                  {exc.reverses && <span className="partner"> ⇄ {exc.reverses}</span>}
+                  {exc.reverses && <span className="partner">⇄ {exc.reverses}</span>}
+                  <span className="conf">{exc.type_confidence}</span>
+                  <span className="age">{exc.age_bucket}</span>
                 </td>
-                <td className="conf">{exc.type_confidence}</td>
-                <td className="age">{exc.age_bucket}</td>
               </tr>
               {isOpen && (
                 <tr className="proof">
-                  <td colSpan={5}><ExceptionDetail exc={exc} /></td>
+                  <td colSpan={4}><ExceptionDetail exc={exc} /></td>
                 </tr>
               )}
             </Fragment>
@@ -221,6 +279,30 @@ function ExceptionRows({ rows, open, setOpen }) {
         })}
       </tbody>
     </table>
+  )
+}
+
+// One block per type, with the sort order made legible. Sticky, because the list
+// runs past a screen and a reader scrolled halfway down it should never have to
+// wonder which type they are looking at — the row itself carries an amount and a
+// bank line id, and neither says whether this is money missing or a note to file.
+function TypeGroup({ type, rows, risk, open, setOpen }) {
+  const total = rows.reduce((n, e) => n + e.amount_at_risk_paise, 0)
+  // Wrapped, and the wrapper is the point: a sticky element sticks within its
+  // containing block, so all eight heads sharing one parent pinned at `top: 0`
+  // simultaneously and stacked on each other over the rows they label. One block per
+  // group means each head releases as its own last row scrolls past, which is what
+  // "sticky subhead" means.
+  return (
+    <div className="type-group">
+      <div className={`type-head ${risk}`}>
+        <span className="type-name">{type}</span>
+        <span className="type-n">{rows.length}</span>
+        <span className="type-sum">{fmtInr(total)}</span>
+        <span className="type-gloss">{TYPE_GLOSS[type] ?? ''}</span>
+      </div>
+      <ExceptionRows rows={rows} open={open} setOpen={setOpen} risk={risk} />
+    </div>
   )
 }
 
@@ -232,7 +314,10 @@ function ExceptionRows({ rows, open, setOpen }) {
 // and mean less.
 //
 // Not behind a click, and not a row in the documentation table: a refusal whose
-// reason is one expand away is a refusal a reader records as a miss.
+// reason is one expand away is a refusal a reader records as a miss. The census is
+// set as a *figure* rather than a clause in a sentence, and the two compositions the
+// search reached are shown side by side underneath it — "279 balance" is a claim,
+// and two columns differing by one transaction id is the evidence for it.
 export function Refused({ rows }) {
   const pairs = Object.values(rows.reduce((acc, exc) => {
     const key = exc.settlement_id ?? exc.bank_line_id
@@ -242,33 +327,113 @@ export function Refused({ rows }) {
   }, {}))
   return (
     <>
-      <div className="sub-head">
+      <div className="sub-head refused-head-rule">
         <span className="eyebrow">
           Refused — the pair ties out, the division is not recorded
         </span>
         <span className="eyebrow">{rows.length} halves</span>
       </div>
       {pairs.map((pair) => (
-        <div className="refused" key={pair.settlement_id ?? pair.halves[0].bank_line_id}>
-          <div className="refused-head">
-            <span className="eid">{pair.settlement_id ?? '—'}</span>
-            <span className="eid halves">
-              {pair.halves.map((h) => h.bank_line_id).join(' + ')}
-            </span>
-            <span className="num">
-              {pair.halves.map((h) => fmtInr(h.amount_at_risk_paise)).join(' + ')}
-            </span>
-            <span className="conf">SPLIT_PAYOUT · documentation</span>
-          </div>
-          {/* The census sentence, straight off the ledger record. It names the
-              settlement, the partner credit and how many sets of transactions
-              balance — counted exactly by `count_exact`, not stopped at the two
-              that already make it a refusal. */}
-          <div className="refused-why">{pair.halves[0].evidence[0]}</div>
-          <div className="blocked"><b>Blocked on:</b> {pair.halves[0].blocked_on}</div>
-        </div>
+        <Refusal key={pair.settlement_id ?? pair.halves[0].bank_line_id} pair={pair} />
       ))}
     </>
+  )
+}
+
+// The census, as one number and its unit. `[[settlement_id, [divisions per
+// payout]], ...]`, counted exactly by `count_exact` rather than stopped at the two
+// that already make it a refusal — the difference between "the solver gave up" and
+// "the source data does not contain the answer", and only one of those is true.
+//
+// **Three shapes, because three different things can be undetermined** (§10's
+// `_sentence`), and one number cannot stand for all of them. The division count is
+// the headline only when there is one settlement and one payout; with two payouts
+// the undetermined thing is *which payout*, and `matcher/proposers/split_p.py`
+// states outright that the counts are "grouped by settlement and never summed"
+// because two payouts can share a division. Taking the max instead renders
+// `[1, 1]` as **1 DIVISION BALANCE**, which reads as determined and is the exact
+// opposite of the finding.
+function census(entries) {
+  if (!entries?.length) return null
+  if (entries.length > 1) {
+    return { n: entries.length, unit: ['settlements', 'tie'] }
+  }
+  const [, counts] = entries[0]
+  if (counts.length === 1) {
+    return { n: counts[0],
+             unit: [`division${counts[0] === 1 ? '' : 's'}`, 'balance'] }
+  }
+  return { n: counts.length, unit: ['payouts', 'tie'] }
+}
+
+function Refusal({ pair }) {
+  const lead = pair.halves[0]
+  const figure = census(lead.census)
+  const alts = lead.alternatives ?? []
+  return (
+    <div className="refused">
+      <div className="refused-top">
+        <span className="eid">{pair.settlement_id ?? '—'}</span>
+        <span className="eid halves">
+          {pair.halves.map((h) => h.bank_line_id).join(' + ')}
+        </span>
+        <span className="num">
+          {pair.halves.map((h) => fmtInr(h.amount_at_risk_paise)).join(' + ')}
+        </span>
+      </div>
+
+      <div className="refused-body">
+        {/* The census at display size. It is the whole finding and it was reading
+            as a clause in the middle of a sentence. */}
+        {figure && (
+          <div className="census">
+            <span className="census-n">{figure.n.toLocaleString('en-IN')}</span>
+            <span className="census-unit">
+              {figure.unit[0]}<br />{figure.unit[1]}
+            </span>
+          </div>
+        )}
+        <div className="refused-text">
+          <div className="refused-why">{lead.evidence[0]}</div>
+          {/* Two of them, side by side. The claim is that the alternatives are real
+              and the input does not choose between them; a reader who can see where
+              the two lists actually diverge does not have to take that on trust —
+              and on `setl_0048` they are not even the same length, 17 transactions
+              against 16, both balancing to the paisa. Truncated at two because the
+              census above is the count and this is the evidence that it is real.
+
+              The separator is its own element so the rule under a differing id
+              underlines the id and not the comma after it. */}
+          {alts.length === 2 && (
+            <div className="candidates">
+              {alts.map((alt, i) => (
+                <div className="candidate" key={i}>
+                  <div className="candidate-head">
+                    <span className="eyebrow">composition {i + 1}</span>
+                    <span className="candidate-n">{alt.length} txns</span>
+                  </div>
+                  <div className="candidate-ids">
+                    {alt.map((e, j) => (
+                      <Fragment key={e}>
+                        <span className={`tx${alts[1 - i].includes(e) ? '' : ' differs'}`}>
+                          {e}
+                        </span>
+                        {j < alt.length - 1 && <span className="sep">, </span>}
+                      </Fragment>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Stated as a decision the system took, not as a note about what it
+              could not do. §1: refusing here is the design working. */}
+          <div className="refused-decision">
+            <b>Refused.</b> {lead.blocked_on}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -326,29 +491,73 @@ function Open({ report }) {
         </p>
       )}
 
+      {/* Triage, from `risk_class` — already stamped on every record by §10 so the
+          CLI board, the API and this screen cannot disagree about which column a row
+          belongs in. At-risk types get full ink and the break colour; documentation
+          types get muted ink and a lighter weight. An AMBIGUOUS_EQUIVALENT at
+          ₹46,943 is a thirty-second filing task and a WITHHELD_RECORD at ₹1,24,363
+          is money nobody can account for, and they were rendering identically. */}
       {atRisk.length > 0 && (
-        <>
-          <div className="sub-head"><span className="eyebrow">At risk</span></div>
-          <ExceptionRows rows={atRisk} open={open} setOpen={setOpen} />
-        </>
+        <div className="triage at-risk">
+          <div className="triage-head">
+            <span className="eyebrow">At risk — the books cannot account for this</span>
+            <span className="eyebrow">{atRisk.length} items</span>
+          </div>
+          {groupByType(atRisk).map(([type, rows]) => (
+            <TypeGroup key={type} type={type} rows={rows} risk="at-risk"
+                       open={open} setOpen={setOpen} />
+          ))}
+        </div>
       )}
+
       {splits.length > 0 && <Refused rows={splits} />}
+
       {docRows.length > 0 && (
-        <>
-          <div className="sub-head"><span className="eyebrow">Needs documentation</span></div>
-          <ExceptionRows rows={docRows} open={open} setOpen={setOpen} />
-        </>
+        <div className="triage documentation">
+          <div className="triage-head">
+            <span className="eyebrow">Needs documentation — accounted for, needs a note</span>
+            <span className="eyebrow">{docRows.length} items</span>
+          </div>
+          {groupByType(docRows).map(([type, rows]) => (
+            <TypeGroup key={type} type={type} rows={rows} risk="documentation"
+                       open={open} setOpen={setOpen} />
+          ))}
+        </div>
       )}
       {ledger.exceptions.length === 0 && <p className="empty">Nothing open.</p>}
     </section>
   )
 }
 
-export default function Board({ report }) {
+export default function Board({ report, provenance }) {
   return (
     <div className="columns">
-      <Closed rows={report.closed_lines} />
+      <Closed rows={report.closed_lines} provenance={provenance} />
       <Open report={report} />
+    </div>
+  )
+}
+
+// The board while the ladder is still working. Same closed column, same rows, same
+// proof strips — the open column does not exist yet, because the exception ledger is
+// Phase E and typing a line before the ladder has finished offering it every tier
+// would name a break that has not happened.
+export function PartialBoard({ rows, provenance }) {
+  return (
+    <div className="columns">
+      <Closed rows={rows} provenance={provenance} partial />
+      <section>
+        <div className="col-head">
+          <span className="eyebrow">Open items</span>
+          <span className="eyebrow">Phase E</span>
+        </div>
+        <p className="empty">
+          Nothing is typed until the ladder finishes. An exception names the missing
+          input (§10), and a line still being offered tiers has not run out of them
+          yet — so the column stays empty rather than filling with findings that
+          would be withdrawn.
+        </p>
+      </section>
     </div>
   )
 }

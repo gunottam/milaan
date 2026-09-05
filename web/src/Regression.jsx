@@ -25,7 +25,7 @@ const SUMMARY_ROWS = [
   ['ambiguity rate', 'ambiguity_rate'],
 ]
 
-export default function Regression({ data }) {
+export default function Regression({ data, lead }) {
   const { seeds, live = [], summary, harness } = data
   const clock = Object.fromEntries(live.map((r) => [r.seed, r]))
   const fp = summary.false_matches
@@ -41,7 +41,26 @@ export default function Regression({ data }) {
     && ablated.mean !== summary.live_total_s.mean
 
   return (
-    <section className="regression">
+    <section className={`regression${lead ? ' lead' : ''}`}>
+      {/* With no run on screen this table *is* the board, so it carries the
+          headline. §11: ten seeds at 100.0% is what makes one seed at 100.0%
+          unarguable, and it should not have to wait behind a button press. */}
+      {lead && (
+        <div className="headline">
+          <div className="headline-figure">
+            <span className="eyebrow">precision</span>
+            <span className="hero">{pct(summary.all_lines_precision.mean)}</span>
+          </div>
+          <div className="headline-under">
+            <b>{fp.total} false matches</b> · {seeds.length} seeds ·{' '}
+            {seeds.reduce((n, r) => n + r.bank_lines, 0).toLocaleString('en-IN')} bank lines
+            <div className="headline-note">
+              Measured offline at the node budget with no clock in the search, so two
+              machines produce the same bytes. Press Run for a live seed.
+            </div>
+          </div>
+        </div>
+      )}
       <div className="col-head">
         <span className="eyebrow">Offline regression · {seeds.length} seeds</span>
         <span className="eyebrow">node budget only · no wall clock</span>

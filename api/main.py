@@ -95,6 +95,9 @@ class RunState:
     progress: float = 0.0
     closed: int = 0
     bank_lines: int = 0
+    # §13's partial board. The rows the ladder has closed so far, in the same shape
+    # the finished report uses, republished as each tier opens.
+    closed_rows: list[dict] = field(default_factory=list)
     started_ns: int = field(default_factory=time.monotonic_ns)
     elapsed_ms: int = 0
     error: str | None = None
@@ -115,56 +118,22 @@ def _touch(state: RunState, **fields) -> None:
         state.elapsed_ms = (time.monotonic_ns() - state.started_ns) // 1_000_000
 
 
-def build_report(run_dir: Path, deadline_ms: int | None = MATCH_DEADLINE_MS,
-                 on_tier=None, *, detective: bool = False) -> dict:
-    """Match, audit, score and serialise one run directory.
+def closed_rows(matched: Mapping, lines: Mapping[str, BankLine],
+                flags: Mapping[str, list[str]] | None = None) -> list[dict]:
+    """§13's closed column, serialised. One shape, two callers.
 
-    The same three calls `scoring.score.main` makes, in the same order, so the JSON
-    the browser renders and the text the terminal prints come out of one
-    computation (§11's reproducibility argument applies to the *inputs*; this is
-    the weaker and more practical claim that there is only one implementation).
+    The final report calls it over the whole `matched` map; the in-flight board
+    calls it as each tier opens, so rows land in the column as the ladder closes
+    them rather than all at once at the end (§13's 40 ms stagger). A second
+    serialiser for the partial case is how the row a judge watches arrive stops
+    matching the row they click on.
+
+    `flags` is §9.4's audit annotation and it comes from the ledger, which does not
+    exist until Phase E. A partial row therefore carries none — the flag appears
+    when the run finishes, which is when it is known.
     """
-    truth = json.loads((run_dir / "truth.json").read_text(encoding="utf-8"))
-    txns = read_csv(run_dir / "gateway_txns.csv", GatewayTxn)
-    bank_lines = read_csv(run_dir / "bank_statement.csv", BankLine)
-    orders = read_csv(run_dir / "orders.csv", Order)
-
-    ladder = run_ladder(txns, bank_lines, truth["config"]["window_days"],
-                        tiers=build_tiers(txns, truth["config"]["window_days"],
-                                          detective=detective),
-                        deadline_ms=deadline_ms, on_tier=on_tier)
-    compositions = {bid: claim.composition
-                    for bid, (_, claim, _) in ladder.matched.items()}
-    if on_tier is not None:
-        on_tier("audit", 0, len(compositions))
-    residue, ledger = phase_e(txns, bank_lines, orders, ladder)
-    if on_tier is not None:
-        on_tier("scoring", 0, len(compositions))
-    report = score(truth, compositions)
-
-    counts = report.counts("headline")
-    every = all_lines(report)
-    # Phase D's own accounting, read off the tier objects the ladder used.
-    from detective.propose import cost_per_1k_records as detective_cost_per_1k
-    from detective.schema import Usage
-    phase_d = [t for t in ladder.tiers if getattr(t, "name", "") in ("D1", "D2")]
-    total_usage = sum((t.usage for t in phase_d), start=Usage())
-    detective_ran = any(t.usage.calls for t in phase_d)
-    lines = {b.bank_line_id: b for b in bank_lines}
-    tiers = {tier for tier, _, _ in ladder.matched.values()}
-
-    # §9.4: accepted matches spanning more than one settlement are flagged
-    # `SETTLEMENT_CONTAMINATION` for human confirmation. The line is *closed* — G3
-    # accepted the shape and G2 balanced it — so the flag rides on the proof rather
-    # than replacing it. A closed line that also appears in the ledger is not a
-    # contradiction; it is a match a human should still look at, and dropping
-    # either half would be the lie.
-    flags: dict[str, list[str]] = {}
-    for exc in ledger.exceptions:
-        if exc.exception_type == "SETTLEMENT_CONTAMINATION" and exc.bank_line_id:
-            flags.setdefault(exc.bank_line_id, []).extend(exc.evidence)
-
-    closed = [{
+    flags = flags or {}
+    return [{
         "bank_line_id": bid,
         "value_date": lines[bid].value_date,
         "target_paise": target(lines[bid]),
@@ -187,11 +156,70 @@ def build_report(run_dir: Path, deadline_ms: int | None = MATCH_DEADLINE_MS,
         },
         # §13: hypothesis-sourced matches carry the `--hypo` marker so provenance is
         # never ambiguous. `source` is stamped here, on the *result* — never on
-        # `Claim` (I9). Every match is deterministic until stage 12 builds the
-        # detective, and the field says which rather than being absent.
+        # `Claim` (I9).
         "source": "deterministic",
         "flags": flags.get(bid, []),
-    } for bid, (tier, claim, verdict) in sorted(ladder.matched.items())]
+    } for bid, (tier, claim, verdict) in sorted(matched.items())]
+
+
+def build_report(run_dir: Path, deadline_ms: int | None = MATCH_DEADLINE_MS,
+                 on_tier=None, *, detective: bool = False) -> dict:
+    """Match, audit, score and serialise one run directory.
+
+    The same three calls `scoring.score.main` makes, in the same order, so the JSON
+    the browser renders and the text the terminal prints come out of one
+    computation (§11's reproducibility argument applies to the *inputs*; this is
+    the weaker and more practical claim that there is only one implementation).
+    """
+    truth = json.loads((run_dir / "truth.json").read_text(encoding="utf-8"))
+    txns = read_csv(run_dir / "gateway_txns.csv", GatewayTxn)
+    bank_lines = read_csv(run_dir / "bank_statement.csv", BankLine)
+    orders = read_csv(run_dir / "orders.csv", Order)
+
+    lines = {b.bank_line_id: b for b in bank_lines}
+
+    # The ladder's notification, turned into §13's partial board. The caller gets
+    # rows rather than a count, so the closed column fills while the run is still
+    # working — 19 s of blank screen is the difference between a demo that shows the
+    # tiers working in order and one that shows nothing and then everything.
+    def announce(name, pass_no, count, matched):
+        if on_tier is not None:
+            on_tier(name, pass_no, count, closed_rows(matched, lines))
+
+    ladder = run_ladder(txns, bank_lines, truth["config"]["window_days"],
+                        tiers=build_tiers(txns, truth["config"]["window_days"],
+                                          detective=detective),
+                        deadline_ms=deadline_ms,
+                        on_tier=announce if on_tier is not None else None)
+    compositions = {bid: claim.composition
+                    for bid, (_, claim, _) in ladder.matched.items()}
+    announce("audit", 0, len(compositions), ladder.matched)
+    residue, ledger = phase_e(txns, bank_lines, orders, ladder)
+    announce("scoring", 0, len(compositions), ladder.matched)
+    report = score(truth, compositions)
+
+    counts = report.counts("headline")
+    every = all_lines(report)
+    # Phase D's own accounting, read off the tier objects the ladder used.
+    from detective.propose import cost_per_1k_records as detective_cost_per_1k
+    from detective.schema import Usage
+    phase_d = [t for t in ladder.tiers if getattr(t, "name", "") in ("D1", "D2")]
+    total_usage = sum((t.usage for t in phase_d), start=Usage())
+    detective_ran = any(t.usage.calls for t in phase_d)
+    tiers = {tier for tier, _, _ in ladder.matched.values()}
+
+    # §9.4: accepted matches spanning more than one settlement are flagged
+    # `SETTLEMENT_CONTAMINATION` for human confirmation. The line is *closed* — G3
+    # accepted the shape and G2 balanced it — so the flag rides on the proof rather
+    # than replacing it. A closed line that also appears in the ledger is not a
+    # contradiction; it is a match a human should still look at, and dropping
+    # either half would be the lie.
+    flags: dict[str, list[str]] = {}
+    for exc in ledger.exceptions:
+        if exc.exception_type == "SETTLEMENT_CONTAMINATION" and exc.bank_line_id:
+            flags.setdefault(exc.bank_line_id, []).extend(exc.evidence)
+
+    closed = closed_rows(ladder.matched, lines, flags)
 
     return {
         "run": str(run_dir), "seed": truth["seed"],
@@ -337,12 +365,12 @@ def _execute(state: RunState) -> None:
                bank_lines=len(data.bank_lines))
         emit(run_dir, data, truth)
 
-        def on_tier(name: str, pass_no: int, closed: int) -> None:
+        def on_tier(name: str, pass_no: int, closed: int, rows: list[dict]) -> None:
             phase = TIER_PHASE.get(name[:1], name)
             if pass_no > 1 and phase.startswith("phase_"):
                 phase = "propagation_2"
             total = max(len(data.bank_lines), 1)
-            _touch(state, phase=phase, closed=closed,
+            _touch(state, phase=phase, closed=closed, closed_rows=rows,
                    # Real progress: closed lines over total, floored at the point
                    # generation left off. Nothing here interpolates against a timer.
                    progress=0.3 + 0.6 * closed / total)
@@ -411,6 +439,11 @@ def get_run(run_id: str) -> dict:
                 "progress": round(state.progress, 3), "closed": state.closed,
                 "bank_lines": state.bank_lines, "elapsed_ms": state.elapsed_ms,
                 "error": state.error, "notes": state.notes,
+                # §13's partial board, so the closed column fills while the ladder
+                # works. Dropped once `report` exists — the report holds the same
+                # rows with §9.4's flags on them, and shipping both would let the
+                # UI render a row that is missing an audit flag it now has.
+                "closed_rows": [] if state.report else state.closed_rows,
                 "phases": list(PHASES), "report": state.report}
 
     path = RUNS / run_id / "report.json"
@@ -420,7 +453,7 @@ def get_run(run_id: str) -> dict:
     return {"run_id": run_id, "status": "done", "phase": "done", "progress": 1.0,
             "closed": report["closed"], "bank_lines": report["bank_lines"],
             "elapsed_ms": report["elapsed_ms"], "error": None, "notes": [],
-            "phases": list(PHASES), "report": report}
+            "closed_rows": [], "phases": list(PHASES), "report": report}
 
 
 def line_detail(report: Mapping, bank_line_id: str) -> dict:

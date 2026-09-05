@@ -36,6 +36,9 @@ const ROW = {
 // One refused pair, as the ledger emits it. The census sentence is the claim.
 const REFUSED = [
   { bank_line_id: 'bl_0048', settlement_id: 'setl_0048',
+    census: [['setl_0048', [279]]],
+    alternatives: [['pay_02538', 'pay_02539', 'rfnd_02557'],
+                   ['pay_02538', 'pay_02539', 'rfnd_02564']],
     amount_at_risk_paise: 4445390, exception_type: 'SPLIT_PAYOUT',
     evidence: ['setl_0048 ties to this credit and bl_9003 jointly to the paisa, '
                + 'but 279 divisions of the payout balance against this credit, and '
@@ -169,8 +172,20 @@ ok('both halves are named on it',
 ok('the census is on the page, with no expand to reach it',
    refused.includes('279 divisions of the payout balance against this credit')
    && !/aria-expanded/.test(refused))
-ok('and it says what would settle it', /class="blocked"/.test(refused)
+ok('and it says what would settle it', /class="refused-decision"/.test(refused)
    && refused.includes('bank advice'))
+// §13, stage 16: the census is the strongest sentence in the product and it was
+// reading as a paragraph. The number is set as a figure, and the two compositions
+// are on the page so "279 balance" has evidence under it rather than only prose.
+ok('the census is set as a figure, not only as a clause',
+   /class="census-n">279</.test(refused))
+ok('the two candidate compositions are shown side by side',
+   (refused.match(/class="candidate"/g) || []).length === 2)
+ok('and the transactions they differ on are marked, the separators are not',
+   (refused.match(/class="tx differs"/g) || []).length === 2
+   && refused.includes('rfnd_02557') && refused.includes('rfnd_02564'))
+ok('the refusal is stated as a decision, not a footnote',
+   /<b>Refused\.<\/b>/.test(refused))
 ok('the halves are priced with Indian grouping',
    refused.includes('\u20b944,453.90') && refused.includes('\u20b943,377.70'))
 

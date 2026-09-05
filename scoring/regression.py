@@ -77,6 +77,26 @@ SCORING_RULE = ("per-line composition set equality (I5). Pair-scored SPLIT_PAYOU
 # (v1.3.1, §9.8). It is monotonically restrictive, so it can only cost recall — and
 # it did not: recall rose on the three seeds that carried the false match, because
 # the transactions the duplicate consumed went back to the line that earned them.
+# §11's ablation delta, and **the pass that measured it**. The default live pass
+# runs ablated, and a run with the model off cannot measure the model — so this is
+# carried as a recorded result with its provenance rather than recomputed into a
+# zero that means "not tried" while reading as "tried and found nothing". Those are
+# the two things §13 must never render identically. `--detective` overwrites it with
+# a live measurement of the same shape.
+PHASE_D_MEASURED = {
+    "measured_by": "stage 14 — docs/journal/stage-14.md, ten seeds, live Groq",
+    "live": False,
+    "seeds": 10,
+    "seeds_model_answered": 6,
+    "extra_lines_closed": 0,
+    "recall_delta": 0.0,
+    "cost_paise": 297,
+    "note": ("Phase D closed zero extra lines on all ten seeds. A floor, not a "
+             "ceiling: four of the ten exhausted Groq's 200,000-token daily cap "
+             "and every call came back 429. The demo therefore runs use_llm: "
+             "false (§15 v1.3.1)."),
+}
+
 MATCHER_CHANGE = ("stage 15: §3.2's reversal-pair rule promoted to a pre-match "
                   "exclusion (matcher/run.py, one implementation shared with §10's "
                   "typing pass). Removed 3 false matches across 10 seeds — all "
@@ -361,6 +381,34 @@ def aggregate(rows: Sequence[Mapping], live_rows: Sequence[Mapping] = ()) -> dic
     return summary
 
 
+def phase_d_delta(live_rows: Sequence[Mapping]) -> dict:
+    """Phase D's contribution, measured from a live pass that actually ran it.
+
+    `closed` against `closed_ablated` over the same data, same deadline, same box —
+    §7.2's ablation is a filter over the tier list, so the two runs differ by the
+    model and nothing else. Seeds where the model never answered are counted and
+    named apart: a 429 is a call, and a pass that was refused contributes no
+    evidence either way.
+    """
+    answered = [r for r in live_rows if r.get("detective_ran")]
+    extra = sum(r["closed"] - r.get("closed_ablated", r["closed"])
+                for r in answered)
+    return {
+        "measured_by": "this pass, --detective",
+        "live": True,
+        "seeds": len(live_rows),
+        "seeds_model_answered": len(answered),
+        "extra_lines_closed": extra,
+        # Lines, not points. The live pass does not record recall at all — the demo
+        # budget sizes the buckets differently (§10.1) — so the honest delta here is
+        # the count of lines the model closed that the ablated run did not.
+        "recall_delta": None,
+        "cost_paise": sum(r.get("detective_cost_paise", 0) for r in live_rows),
+        "note": ("Measured live. Seeds where the model did not answer are excluded "
+                 "from the delta and counted above."),
+    }
+
+
 def run(seeds: Iterable[int] = SEEDS, *, root: Path = ROOT,
         with_live: bool = True, detective: bool = False,
         log=print) -> dict:
@@ -395,6 +443,7 @@ def run(seeds: Iterable[int] = SEEDS, *, root: Path = ROOT,
                 "detective": False,
                 "note": "node budget only, no wall clock — reproducible (§11, 8.6)",
             },
+            "phase_d": phase_d_delta(live_rows) if detective else PHASE_D_MEASURED,
             "live": {
                 "deadline_ms": MATCH_DEADLINE_MS,
                 "uniqueness_node_budget": cfg.UNIQUENESS_NODE_BUDGET_DEMO,

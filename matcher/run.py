@@ -196,7 +196,7 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                window_days: int = 2, tiers: Sequence | None = None, *,
                deadline_ms: int | None = MATCH_DEADLINE_MS,
                passes: int = PROPAGATION_PASSES,
-               on_tier: Callable[[str, int, int], None] | None = None) -> Run:
+               on_tier: Callable[[str, int, int, Matched], None] | None = None) -> Run:
     """A1 → A2 → A3 → B1 → B2 → C1 → C2 → C3, twice, under one clock.
 
     `deadline_ms=None` disables the clock and leaves the node budget as the only
@@ -211,12 +211,18 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
     the returned `Run.excluded`. They are not `exceeded`: nothing ran out of time on
     them, they were never work. §10 types them from the same rule.
 
-    `on_tier(tier_name, pass_no, closed_so_far)` fires once as each tier opens. It
-    exists so §12's `phase` and `progress` fields report what the ladder is actually
-    doing rather than a timer pretending to — the API polls at 500 ms and the run is
-    under 60 s, so a progress bar that interpolates would be visibly lying for most
-    of the run. It is a notification, never a control: nothing it returns is read,
-    and an exception from it is the caller's bug, not a reason to abandon the run.
+    `on_tier(tier_name, pass_no, closed_so_far, matched)` fires once as each tier
+    opens. It exists so §12's `phase` and `progress` fields report what the ladder is
+    actually doing rather than a timer pretending to — the API polls at 500 ms and
+    the run is under 60 s, so a progress bar that interpolates would be visibly lying
+    for most of the run. It is a notification, never a control: nothing it returns is
+    read, and an exception from it is the caller's bug, not a reason to abandon the
+    run.
+
+    **`matched` is the live map, handed over so the board can fill as the ladder
+    works rather than all at once at the end.** It is the ladder's own dict and not a
+    copy — copying 100 verdicts sixteen times a run to guard against a caller that
+    should not be writing to it is the wrong trade. Read it; do not keep it.
     """
     by_id = {t.entity_id: t for t in txns}
     tiers = build_tiers(txns, window_days) if tiers is None else tiers
@@ -252,7 +258,7 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                 stopped = True
                 break
             if on_tier is not None:
-                on_tier(tier.name, pass_no, len(matched))
+                on_tier(tier.name, pass_no, len(matched), matched)
             open_lines = [b for b in bank_lines
                           if b.bank_line_id not in matched
                           and b.bank_line_id not in excluded]
@@ -308,6 +314,10 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                         if t.entity_id not in claimed]
                 claims = tier.propose(line, pool)
                 refusal = getattr(tier, "refusals", {}).get(line.bank_line_id)
+                # C3's census, as numbers, carried beside the sentence that reports
+                # it. §10's ledger turns both into one record and §13 sets the count
+                # as a figure; neither should have to parse it back out of prose.
+                census = getattr(tier, "census", {}).get(line.bank_line_id)
                 if not claims:
                     if refusal:
                         # A tier that declined to search is not a tier that searched
@@ -318,7 +328,8 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                                       "pool": len(pools[line.bank_line_id]),
                                       "candidates": 0, "won": False,
                                       "stale": 0, "refused": True, "anchors": [],
-                                      "unproven": refusal, "tied": []})
+                                      "unproven": refusal, "tied": [],
+                                      "census": census})
                     continue
                 verdicts = [(claim, check(claim, line, by_id, claimed))
                             for claim in claims]
@@ -346,6 +357,7 @@ def run_ladder(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                                        if c.anchor_settlement_id}),
                     "unproven": refusal,
                     "tied": tied,
+                    "census": census,
                 })
                 if won is None:
                     # §9.6's second round is only worth its tokens if it knows

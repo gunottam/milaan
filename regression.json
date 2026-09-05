@@ -14,6 +14,16 @@
       "note": "node budget only, no wall clock \u2014 reproducible (\u00a711, 8.6)",
       "uniqueness_node_budget": 40000000
     },
+    "phase_d": {
+      "cost_paise": 297,
+      "extra_lines_closed": 0,
+      "live": false,
+      "measured_by": "stage 14 \u2014 docs/journal/stage-14.md, ten seeds, live Groq",
+      "note": "Phase D closed zero extra lines on all ten seeds. A floor, not a ceiling: four of the ten exhausted Groq's 200,000-token daily cap and every call came back 429. The demo therefore runs use_llm: false (\u00a715 v1.3.1).",
+      "recall_delta": 0.0,
+      "seeds": 10,
+      "seeds_model_answered": 6
+    },
     "scoring_rule": "per-line composition set equality (I5). Pair-scored SPLIT_PAYOUT measured at 1 TP -> 2 TP on seed 42 and DECLINED \u2014 it requires C3 to commit a division the source data does not determine (two identical refunds per pair), so it is a false match half the time by construction. See docs/build-stages.md stage 14 and docs/journal/stage-13.md.",
     "seeds": [
       42,
@@ -1626,27 +1636,27 @@
       "costs_no_recall_on_any_seed": true,
       "lines_per_seed": {
         "1": 6,
-        "5": 6,
-        "7": 6,
+        "101": 6,
         "13": 6,
+        "2026": 6,
         "23": 6,
         "42": 6,
-        "99": 6,
-        "101": 6,
+        "5": 6,
+        "7": 6,
         "777": 6,
-        "2026": 6
+        "99": 6
       },
       "withheld_resolvable_per_seed": {
         "1": 0,
-        "5": 0,
-        "7": 0,
+        "101": 0,
         "13": 0,
+        "2026": 0,
         "23": 0,
         "42": 0,
-        "99": 0,
-        "101": 0,
+        "5": 0,
+        "7": 0,
         "777": 0,
-        "2026": 0
+        "99": 0
       },
       "withheld_resolvable_total": 0
     },
@@ -1654,15 +1664,15 @@
       "clean_on_every_seed": true,
       "per_seed": {
         "1": 0,
-        "5": 0,
-        "7": 0,
+        "101": 0,
         "13": 0,
+        "2026": 0,
         "23": 0,
         "42": 0,
-        "99": 0,
-        "101": 0,
+        "5": 0,
+        "7": 0,
         "777": 0,
-        "2026": 0
+        "99": 0
       },
       "total": 0
     },

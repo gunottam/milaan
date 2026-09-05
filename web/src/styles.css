@@ -20,6 +20,11 @@
   --tally: #1D6B4F;
   --break: #A8452B;
   --hypo:  #6A5BA8;
+  /* The only wash in the file, and it exists for one element: the UNRECONCILED
+   * band. §13's palette is ink on paper with three accents, and a tint would be
+   * decoration anywhere else — here it is what makes the band read as a stamp on
+   * the page rather than as another ruled row. */
+  --break-wash: #FBF1EE;
 
   --mono: 'IBM Plex Mono', ui-monospace, monospace;
   --sans: 'IBM Plex Sans', system-ui, sans-serif;
@@ -121,28 +126,116 @@ button.run:disabled { background: var(--ink-soft); border-color: var(--ink-soft)
 
 /* --- summary ------------------------------------------------------------- */
 
-.summary { padding: 14px 0 16px; border-bottom: 1px solid var(--rule); }
+.summary { padding: 0 0 16px; border-bottom: 1px solid var(--rule); }
 
-.summary-line { display: flex; gap: 26px; align-items: baseline; flex-wrap: wrap;
-                margin-bottom: 6px; }
+/* --- the headline -------------------------------------------------------- */
 
-.summary .figure { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.summary .label  { color: var(--ink-soft); }
-
-/* The residue gap is the global honesty indicator (§13) and sits in the header.
- * It is the only element on the page allowed to shout. */
-.gap {
-  margin-left: auto;
-  display: flex; align-items: baseline; gap: 9px;
-  padding: 4px 11px;
-  border: 1px solid var(--rule);
-  border-radius: 0;
-  background: none;
-  font-family: var(--mono);
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
+/* One figure at display size, and everything else demoted under it.
+ *
+ * Precision is what the architecture exists to produce — every gate but G4 can
+ * only cost recall, the search refuses rather than guesses, and the ledger exists
+ * so a refusal is useful. Six statistics at equal weight communicated none of that
+ * ordering, so the page had no argument, only readings.
+ *
+ * Still a ledger: no card, no shadow, no gradient. The size *is* the hierarchy, and
+ * the rule under it is the same rule every other total on this page sits above. */
+.headline {
+  display: flex; align-items: flex-end; gap: 30px; flex-wrap: wrap;
+  padding: 20px 0 18px;
+  border-bottom: 1px solid var(--ink);
 }
+.headline-figure { display: flex; flex-direction: column; gap: 2px; }
+.headline .hero {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  font-size: 76px;
+  line-height: 0.9;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  /* Optical alignment: tabular figures carry left side bearing, so the glyph edge
+   * sits a hair right of the eyebrow above it without this. */
+  margin-left: -3px;
+}
+.headline-under { flex: 1 1 22em; padding-bottom: 5px;
+                  font-size: 14px; color: var(--ink-soft); }
+.headline-under b { color: var(--ink); font-weight: 500;
+                    font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.headline-note { font-size: 12px; line-height: 1.5; margin-top: 6px;
+                 max-width: 46em; }
+
+/* Supporting scale. Same figures, half the voice. */
+.support { padding-top: 12px; }
+.support-line { display: flex; gap: 20px; align-items: baseline; flex-wrap: wrap;
+                margin-bottom: 5px; font-size: 12.5px; color: var(--ink-soft); }
+.support .figure { font-family: var(--mono); font-variant-numeric: tabular-nums;
+                   color: var(--ink); }
+.support .label  { color: var(--rule); }
+
+/* --- the residue gap: two states, and they must not look alike ------------ */
+
+/* §9.7's trial balance is the global honesty indicator, and the two states are not
+ * two colours of one component.
+ *
+ * **Reconciled is quiet.** One line, tally green, small — a reader scanning the
+ * page should be able to skip it, because "the books close" is the expected case
+ * and shouting it teaches people to ignore the element.
+ *
+ * **Unreconciled is the most aggressive thing on the page.** A ruled band across
+ * the full width in the break colour, the word UNRECONCILED set larger than any
+ * label on the screen, and — the part that matters — it is *taller*. A reader who
+ * has seen this board once knows something is wrong from the position of the
+ * headline, before reading a figure. A gap indicator that changes only its colour
+ * and its digits fails the one job a ledger has. */
+
+.residue { border-bottom: 1px solid var(--rule); }
+
+.residue.reconciles {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 8px 0; color: var(--tally); font-size: 12px;
+}
+.residue.reconciles .residue-mark { font-family: var(--mono); }
+.residue.reconciles .residue-word {
+  font-size: 11px; letter-spacing: 0.12em; font-weight: 500;
+}
+.residue.reconciles .residue-detail { color: var(--ink-soft); flex: 1 1 20em; }
+
+/* The band. 3px top and bottom in the break colour — the same double-rule idiom
+ * the rest of the sheet uses for a closed sum, turned up, because this is the one
+ * place the sum did not close. */
+.residue.broken, .residue.unknown {
+  border-top: 3px solid var(--break);
+  border-bottom: 3px solid var(--break);
+  background: var(--break-wash);
+  margin-top: 10px;
+}
+.residue-band {
+  display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap;
+  padding: 13px 14px 9px;
+}
+.residue.broken .residue-word, .residue.unknown .residue-word {
+  font-family: var(--sans);
+  font-size: 22px; font-weight: 600; letter-spacing: 0.1em;
+  color: var(--break);
+}
+.residue-figure {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 26px; font-weight: 500; color: var(--break);
+  margin-left: auto;
+}
+.residue.broken .residue-detail, .residue.unknown .residue-detail {
+  padding: 0 14px 13px; font-size: 12.5px; line-height: 1.5;
+  color: var(--ink); max-width: 62em;
+}
+.residue-more {
+  font-family: var(--sans); font-size: 11px; font-weight: 500;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: inherit; background: none; border: none; border-bottom: 1px solid currentColor;
+  padding: 0 0 1px; cursor: pointer; opacity: 0.75;
+}
+.residue-more:hover { opacity: 1; }
+.residue .gap-composition { margin: 0 14px 13px; width: auto; }
+.residue.reconciles .gap-composition { margin: 0 0 10px; width: 100%; }
 
 /* The composition of the gap, straight from `audit.py`. Preformatted because the
  * figures are already aligned there and re-laying them out in CSS would be a
@@ -194,38 +287,194 @@ table.buckets tr.bucket-total td { border-bottom: none; color: var(--ink-soft); 
 .risk .note { color: var(--ink-soft); font-size: 11px; line-height: 1.45; }
 .risk.docs .amount { color: var(--ink-soft); }
 
-.sub-head { padding: 14px 0 5px; border-bottom: 1px solid var(--rule); }
+.sub-head { padding: 14px 0 5px; border-bottom: 1px solid var(--rule);
+            display: flex; align-items: baseline; justify-content: space-between; }
+
+/* --- triage: at-risk against documentation ------------------------------- */
+
+/* `risk_class` is stamped on every exception by §10, so the CLI board, the API and
+ * this screen cannot disagree about which column a row belongs in. It was being
+ * used to split two totals and nothing else, which left an AMBIGUOUS_EQUIVALENT at
+ * ₹46,943 — a thirty-second filing task, identical books either way — rendering
+ * exactly like a WITHHELD_RECORD at ₹1,24,363, which is money nobody can account
+ * for. Same weight, same ink, same size. A reader triaging that list is doing the
+ * work the record already did.
+ *
+ * At-risk: full ink, the break colour on the amount, a heavier rule.
+ * Documentation: muted ink throughout and a lighter weight. Nothing is hidden —
+ * both lists are on the page in full — but they no longer look like one list. */
+
+.triage { margin-top: 6px; }
+.triage-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 16px 0 5px; border-bottom: 2px solid var(--ink);
+}
+.triage.documentation .triage-head { border-bottom: 1px solid var(--rule); }
+.triage.at-risk .triage-head .eyebrow { color: var(--break); }
+
+/* Sticky, because the list runs past a screen. A row carries an amount and a bank
+ * line id and neither says whether this is money missing or a note to file, so the
+ * type has to stay on screen while its rows are. */
+/* The containing block for one sticky head. Without it every head in the column
+ * pins at `top: 0` together and they pile up over the rows they name. */
+.type-group { position: relative; }
+.type-head {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 7px 0 5px; margin-top: 10px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+}
+.type-head .type-name {
+  font-family: var(--mono); font-size: 12px; font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.type-head .type-n {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 11px; color: var(--paper); background: var(--ink-soft);
+  padding: 0 5px; min-width: 18px; text-align: center;
+}
+.type-head .type-sum { font-family: var(--mono);
+                       font-variant-numeric: tabular-nums; font-size: 12px; }
+.type-head .type-gloss { font-size: 11px; color: var(--ink-soft);
+                         margin-left: auto; text-align: right; }
+
+.type-head.at-risk { border-bottom-color: var(--break); }
+.type-head.at-risk .type-name { color: var(--break); }
+.type-head.at-risk .type-n { background: var(--break); }
+.type-head.documentation .type-name { color: var(--ink-soft); font-weight: 400; }
+.type-head.documentation .type-sum  { color: var(--ink-soft); }
+.type-head.documentation .type-n    { background: var(--rule); color: var(--ink-soft); }
+
+/* The rows themselves. Weight is the triage signal, not a badge. */
+table.ledger.exceptions td.amount { font-size: 13px; }
+table.ledger.exceptions.at-risk td.amount { color: var(--ink); font-weight: 500; }
+table.ledger.exceptions.documentation td { color: var(--ink-soft); }
+table.ledger.exceptions.documentation td.amount { font-weight: 400; }
+table.ledger.exceptions td.exc-meta {
+  text-align: right; white-space: nowrap;
+  display: flex; gap: 9px; justify-content: flex-end; align-items: baseline;
+}
+table.ledger.exceptions td.exc-meta .partner { font-family: var(--mono);
+                                               font-size: 11px; }
 
 .cut-note {
   font-size: 12px; color: var(--ink-soft); line-height: 1.5;
   padding: 10px 0; margin: 0; border-bottom: 1px solid var(--rule);
 }
 .cut-note b { font-family: var(--mono); font-weight: 400; color: var(--break); }
-.gap.reconciles { border-color: var(--tally); color: var(--tally); }
-.gap.broken     { border-color: var(--break); color: var(--break); }
-.gap.unknown    { border-color: var(--ink-soft); color: var(--ink-soft); }
+/* --- the ablation, as a control ------------------------------------------ */
 
-/* The ablation bar. A ruled track, not a progress widget. */
-.ablation { display: flex; align-items: center; gap: 11px; font-size: 12px; }
-.track { position: relative; width: 260px; height: 9px; border: 1px solid var(--rule); }
-.track .det { position: absolute; inset: 0 auto 0 0; background: var(--bar); }
+/* A ruled track, not a progress widget — and now a button, because the finding it
+ * reports is checkable. "The deterministic tiers did all of this" is a claim, and
+ * the toggle puts tier provenance on every closed row so a reader can go and look
+ * rather than take the sentence. */
+.ablation {
+  display: flex; align-items: center; gap: 11px; font-size: 12px;
+  width: 100%; text-align: left;
+  background: none; border: none; border-top: 1px solid var(--rule);
+  border-radius: 0; padding: 9px 0 2px; margin-top: 4px;
+  color: var(--ink-soft); font-family: var(--sans); cursor: pointer;
+}
+.ablation:hover { color: var(--ink); }
+.ablation.on { color: var(--ink); }
+.ablation .abl-figure { font-family: var(--mono);
+                        font-variant-numeric: tabular-nums; color: var(--ink); }
+.ablation .abl-key b { font-family: var(--mono); color: var(--ink); font-weight: 500; }
+.ablation .abl-toggle {
+  margin-left: auto; font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; font-weight: 500;
+}
+.track { position: relative; width: 190px; height: 9px; border: 1px solid var(--rule);
+         flex: none; }
+/* `--bar` is the greenbar tint and it is almost invisible against paper, so the
+ * track rendered as an empty box beside a percentage — which reads as *nothing
+ * measured* next to a figure that says 92.6%. The fill is ink at low opacity: still
+ * a ruled track rather than a progress widget, but it is now a fill. */
+.track .det { position: absolute; inset: 0 auto 0 0; background: var(--ink);
+              opacity: 0.28; }
 .track .agent { position: absolute; inset: 0 auto 0 0; background: var(--hypo);
                 opacity: 0.35; }
 
-.notes { margin: 8px 0 0; padding: 0; list-style: none; }
-.notes li { color: var(--break); font-size: 12px; padding: 2px 0; }
-.notes li::before { content: '!! '; font-family: var(--mono); }
+/* Tier provenance on the closed column. Off by default — the tier is a detail
+ * until somebody asks which tier — and when on, the code is set in ink with a
+ * left rule keyed by phase, so a column of A/B/C reads as three bands rather than
+ * as forty-eight two-character strings. */
+.tier-strip { display: flex; flex-wrap: wrap; gap: 0 14px; padding: 8px 0;
+              border-bottom: 1px solid var(--rule); }
+.tier-cell { display: flex; align-items: baseline; gap: 5px; font-size: 12px; }
+.tier-key { font-family: var(--mono); font-weight: 500; padding-left: 5px;
+            border-left: 3px solid var(--rule); }
+.tier-n { font-family: var(--mono); font-variant-numeric: tabular-nums;
+          color: var(--ink-soft); }
+.tier-key.tA, .tier.keyed.tA { border-left-color: var(--tally); }
+.tier-key.tB, .tier.keyed.tB { border-left-color: var(--ink); }
+.tier-key.tC, .tier.keyed.tC { border-left-color: var(--ink-soft); }
+.tier-key.tD, .tier.keyed.tD { border-left-color: var(--hypo); }
+table.ledger td.tier.keyed {
+  color: var(--ink); font-weight: 500;
+  border-left: 3px solid var(--rule); padding-left: 6px;
+}
+
+/* Disclosures, not alarms. They were set in the break colour, and once the residue
+ * band owns that register two lines of red prose underneath it dilute the one thing
+ * on the page that is supposed to stop a reader. The `!!` mark keeps the signal;
+ * the sentence goes back to soft ink. */
+.notes { margin: 10px 0 0; padding: 0; list-style: none; }
+.notes li { color: var(--ink-soft); font-size: 12px; padding: 2px 0 2px 18px;
+            line-height: 1.45; text-indent: -18px; }
+.notes li::before { content: '!! '; font-family: var(--mono); color: var(--break); }
 
 /* --- the two columns ----------------------------------------------------- */
 
-.columns { display: grid; grid-template-columns: 1.35fr 1fr; gap: 0; }
-.columns > section:first-child { border-right: 1px solid var(--rule); padding-right: 22px; }
-.columns > section:last-child  { padding-left: 22px; }
+/* **Two columns are the argument** — this closed, this did not — and the second is
+ * as much the product as the first. So the split is not a filter tab and the open
+ * column is never behind one.
+ *
+ * The closed column had the wider half and did not need it: `bl_0001 ₹76,125.30 C1`
+ * is a narrow row, and the widest thing in the column is the proof strip's figure
+ * column at 160px. 400px holds both with the label column to spare. Everything
+ * recovered goes to the open side, which carries sentences — a census, a
+ * `blocked_on` naming a missing input, two candidate compositions side by side —
+ * and was wrapping every one of them.
+ *
+ * Measured at 1280×720: 1180 px sheet − 40 px padding = 1140 px, split 445 / 695
+ * with the 22 px gutters — against 640 / 475 before. The closed column gave up
+ * 195 px and the strip inside it still sets its arithmetic at 15 px without
+ * wrapping a label.
+ *
+ * **Projector distance is the 900 px breakpoint, not this grid.** Two columns of
+ * 15 px mono cannot be read from the back of a room at any split; 1280×720 on a 2 m
+ * screen puts one CSS px at ~1.6 mm, and ~28 mm of cap height is what 4 m needs.
+ * Zooming the browser past ~140% crosses the breakpoint below, which stacks the
+ * columns and gives the proof strip the full sheet width — that is the mode to
+ * present in, and it needs no separate build. */
+.columns { display: grid; grid-template-columns: minmax(380px, 0.64fr) 1fr; gap: 0; }
+.columns > section:first-child { border-right: 1px solid var(--rule); padding-right: 22px;
+                                 min-width: 0; }
+.columns > section:last-child  { padding-left: 22px; min-width: 0; }
 
+/* Below 900px the columns stack — a narrow window, and equally a laptop at 150%
+ * browser zoom, which is how this gets projected. Presentation mode is therefore
+ * something the layout already has, and the proof strip should use the room: 19px
+ * against 15px, and the figure column widened to match. Measured at 1/3 scale (the
+ * proxy for 4 m from a 2 m screen) the totals and the delta are readable here and
+ * are not at 100%. */
 @media (max-width: 900px) {
   .columns { grid-template-columns: 1fr; }
   .columns > section:first-child { border-right: none; padding-right: 0; }
   .columns > section:last-child  { padding-left: 0; border-top: 1px solid var(--rule); }
+
+  .strip { font-size: 19px; }
+  .strip td { padding: 4px 0; }
+  .strip td.sign { width: 19px; }
+  .strip td.count { width: 44px; padding-right: 12px; }
+  .strip td.figure, .strip .double-under, .strip .ties .delta { width: 180px; }
+  .strip .ties { font-size: 17px; }
+  .strip .ties .delta { font-size: 19px; }
+  .strip .strip-head { font-size: 15px; }
+  table.ledger td { padding: 7px 8px; }
+  .eid { font-size: 15px; }
 }
 
 .col-head { display: flex; align-items: baseline; justify-content: space-between;
@@ -287,19 +536,32 @@ table.ledger td.tick { width: 18px; color: var(--tally); text-align: center;
  * and the whole point is that the arithmetic sits under the line it explains. */
 tr.proof > td { padding: 0 8px 16px; background: var(--paper); }
 
-.strip { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 13px; }
+/* **15px, not 13px, and measured rather than chosen.** The arithmetic is what a
+ * judge reads closest and it was set two steps below the body copy of a screen it
+ * is the point of. At 1280×720 projected on a 2 m screen one CSS px is ~1.6 mm, so
+ * 13px gives a cap height near 9 mm — legible to about a metre and a half and a grey
+ * smear past that. 15px does not fix a room (see the note on `.columns`), but it is
+ * the largest step the 418 px column takes without the labels wrapping, and it
+ * matters at the distance the strip is actually read from. */
+.strip { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 15px; }
 
 .strip .strip-head {
   display: flex; justify-content: space-between; align-items: baseline;
-  padding: 9px 0 8px; color: var(--ink-soft);
+  gap: 10px; flex-wrap: wrap;
+  padding: 9px 0 8px; color: var(--ink-soft); font-size: 13px;
 }
 
 .strip table { width: 100%; border-collapse: collapse; }
-.strip td { padding: 2px 0; }
-.strip td.sign  { width: 20px; }
-.strip td.count { width: 46px; text-align: right; padding-right: 10px; }
+.strip td { padding: 3px 0; }
+.strip td.sign  { width: 15px; }
+.strip td.count { width: 34px; text-align: right; padding-right: 9px; }
 .strip td.desc  { color: var(--ink); }
-.strip td.figure { text-align: right; width: 160px; }
+/* 140px, down from 160. The widest figure this column has ever held is
+ * `₹12,34,567.89` at 13 characters, which is 117 px at 15 px mono — the extra 43 px
+ * was buying nothing and costing the label column, where `TDS @ 0.10% u/s 194-O`
+ * was wrapping onto a second line inside the one table on the page that must not
+ * look approximate. */
+.strip td.figure { text-align: right; width: 140px; white-space: nowrap; }
 
 /* Single rule above the total, double rule below. The double rule is the
  * bookkeeping convention for a closed sum and it is the reason the strip reads as
@@ -314,18 +576,18 @@ tr.proof > td { padding: 0 8px 16px; background: var(--paper); }
   border-top: 1px solid var(--ink);
   border-bottom: 1px solid var(--ink);
   height: 3px;
-  width: 160px;
+  width: 140px;
   margin-left: auto;
 }
 
 /* The delta on its own line, right-aligned under the total it refers to. It was
  * sharing a flex row with the tie sentence and wrapping beneath the transaction
  * count, where the number a judge reads closest looked like a trailing note. */
-.strip .ties { padding-top: 9px; color: var(--tally); }
+.strip .ties { padding-top: 10px; color: var(--tally); font-size: 14px; }
 .strip .ties .tie-line { line-height: 1.5; }
 .strip .ties .delta {
-  text-align: right; width: 160px; margin-left: auto;
-  padding-top: 3px; font-weight: 500; white-space: nowrap;
+  text-align: right; width: 140px; margin-left: auto;
+  padding-top: 4px; font-weight: 500; white-space: nowrap; font-size: 15px;
 }
 .strip .ties.off { color: var(--break); }
 
@@ -359,16 +621,37 @@ tr.proof > td { padding: 0 8px 16px; background: var(--paper); }
                   padding-top: 4px; }
 .detail .diag { font-family: var(--mono); font-size: 12px; color: var(--break); }
 
-/* --- phases -------------------------------------------------------------- */
+/* --- the run, while it is running ---------------------------------------- */
 
-.phases { display: flex; gap: 0; flex-wrap: wrap; padding: 10px 0 0; }
-.phase {
-  font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em;
-  color: var(--rule); padding: 2px 9px 2px 0;
+/* Nineteen seconds of blank paper is dead demo time, and the run already knows what
+ * it is doing — §12 publishes the phase and the closed count at 500 ms. Printed as
+ * a checklist the ladder works down, it stops being a wait and becomes §9.8's
+ * argument happening in front of a judge: A closes 79 lines on hard identifiers
+ * before C searches for anything. */
+
+.summary.running { border-bottom: 1px solid var(--ink); padding-bottom: 14px; }
+.run-head { display: flex; align-items: baseline; gap: 14px; padding: 16px 0 4px; }
+.run-count { font-family: var(--mono); font-variant-numeric: tabular-nums;
+             font-size: 30px; font-weight: 500; }
+.run-count .of { font-size: 13px; font-weight: 400; color: var(--ink-soft); }
+
+.phase-run { list-style: none; margin: 8px 0 0; padding: 0;
+             columns: 2; column-gap: 26px; }
+.phase-step {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: 12px; padding: 2px 0; color: var(--rule);
+  break-inside: avoid;
 }
-.phase.past { color: var(--ink-soft); }
-.phase.now  { color: var(--ink); font-weight: 500; }
-.phase.skipped { color: var(--rule); text-decoration: line-through; }
+.phase-mark { font-family: var(--mono); width: 11px; flex: none; }
+.phase-name { font-family: var(--mono); letter-spacing: 0.02em; }
+.phase-count { font-family: var(--mono); font-variant-numeric: tabular-nums;
+               font-size: 11px; color: var(--ink-soft); margin-left: auto; }
+.phase-step.past { color: var(--ink-soft); }
+.phase-step.past .phase-mark { color: var(--tally); }
+.phase-step.now  { color: var(--ink); font-weight: 500; }
+.phase-step.ahead { color: var(--rule); }
+.phase-step.off { color: var(--rule); }
+.phase-step.off .phase-name { text-decoration: line-through; }
 
 /* --- motion -------------------------------------------------------------- */
 
@@ -392,6 +675,10 @@ tr.row.fresh { animation: settle 160ms ease-out both; }
    stops a stage) and on a breached ceiling. */
 
 .regression { margin-top: 28px; }
+/* With no run on screen the regression *is* the board: ten seeds at 100.0% is what
+ * makes one seed at 100.0% unarguable, and it should not be below the fold. */
+.regression.lead { margin-top: 0; }
+.regression.lead .headline { border-bottom: 1px solid var(--ink); }
 .regression .note { color: var(--ink-soft); font-size: 13px; max-width: 62em;
                     margin: 6px 0 12px; }
 .regression .mono { font-family: var(--mono); }
@@ -428,16 +715,77 @@ table.reg.summary td.range { color: var(--ink-soft); text-align: left;
 .reg-claims li.clean b { color: var(--tally); }
 .reg-claims li.broken b { color: var(--break); }
 
-/* One block per pair, not one row per half: the pair is the unit of meaning and
-   the reason is a sentence, which is why it is not in a table. */
-.refused { border-bottom: 1px solid var(--rule); padding: 8px 0; }
-.refused-head { display: flex; gap: 14px; align-items: baseline;
-                flex-wrap: wrap; }
-.refused-head .eid { font-family: var(--mono); }
-.refused-head .halves { color: var(--ink); }
-.refused-head .num { font-family: var(--mono);
-                     font-variant-numeric: tabular-nums; color: var(--ink-soft); }
-.refused-head .conf { font-size: 11px; letter-spacing: 0.12em;
-                      text-transform: uppercase; color: var(--hypo); }
-.refused-why { margin: 4px 0; max-width: 74em; }
-.refused .blocked { color: var(--ink-soft); font-size: 13px; }
+/* --- the refusals -------------------------------------------------------- */
+
+/* One block per pair, not one row per half: the pair is the unit of meaning and the
+ * reason is a sentence, which is why it is not in a table.
+ *
+ * **The census is a figure, not a clause.** "279 divisions of the payout balance
+ * against this credit" is the strongest sentence in the product and it was reading
+ * as a paragraph, with the number that carries it buried in the middle of a line of
+ * prose. Set at display size in the hypothesis colour it is the first thing in the
+ * block, and the sentence explains it instead of hiding it.
+ *
+ * **And the two compositions are shown.** "279 balance" is a claim; two columns of
+ * transaction ids differing in one position is the evidence. The differing id is the
+ * only thing marked, because it is the only thing that differs. */
+
+.refused { border-bottom: 1px solid var(--rule); padding: 12px 0 14px; }
+.refused-top { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap;
+               padding-bottom: 8px; }
+.refused-top .eid { font-family: var(--mono); }
+.refused-top .halves { color: var(--ink); }
+.refused-top .num { font-family: var(--mono); font-variant-numeric: tabular-nums;
+                    color: var(--ink-soft); margin-left: auto; }
+
+.refused-body { display: flex; gap: 18px; align-items: flex-start; }
+
+.census { display: flex; align-items: baseline; gap: 7px; flex: none;
+          padding-right: 18px; border-right: 1px solid var(--rule); }
+.census-n {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 40px; line-height: 0.95; font-weight: 500; color: var(--hypo);
+}
+.census-unit { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+               color: var(--ink-soft); line-height: 1.35; }
+
+.refused-text { flex: 1 1 auto; min-width: 0; }
+.refused-why { margin: 0 0 8px; font-size: 13px; line-height: 1.5; max-width: 60em; }
+
+.candidates { display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+              border-top: 1px solid var(--rule); margin-bottom: 8px; }
+.candidate { padding: 6px 12px 7px 0; min-width: 0; }
+.candidate + .candidate { padding-left: 12px; border-left: 1px solid var(--rule); }
+.candidate-head { display: flex; align-items: baseline; justify-content: space-between;
+                  gap: 8px; }
+.candidate-n { font-family: var(--mono); font-variant-numeric: tabular-nums;
+               font-size: 11px; color: var(--ink-soft); }
+/* Wrap between ids, never inside one. `word-break: break-all` split `pay_01249`
+ * across two lines as `pay_0124` / `9`, which is an entity id a reader cannot
+ * check — the whole reason these are on the page. */
+.candidate-ids { font-family: var(--mono); font-size: 11px; line-height: 1.6;
+                 color: var(--ink-soft); margin-top: 3px; }
+.candidate-ids .tx { white-space: nowrap; }
+.candidate-ids .sep { color: var(--rule); }
+/* The ids that are not in the other list. Underlined rather than coloured: the
+ * palette already spends red on money at risk, and this is not that. The separator
+ * is a sibling, so the rule sits under the id and not under the comma. */
+.candidate-ids .tx.differs {
+  color: var(--ink); font-weight: 500;
+  border-bottom: 2px solid var(--hypo);
+}
+
+/* Stated as a decision, not a footnote. §1: refusing here is the design working,
+ * and the sentence should read as something the system did. */
+.refused-decision { font-size: 13px; line-height: 1.5; color: var(--ink);
+                    max-width: 60em; }
+.refused-decision b { font-weight: 600; color: var(--hypo);
+                      letter-spacing: 0.02em; }
+
+@media (max-width: 1120px) {
+  .refused-body { flex-direction: column; gap: 10px; }
+  .census { border-right: none; padding-right: 0; }
+  .candidates { grid-template-columns: 1fr; }
+  .candidate + .candidate { padding-left: 0; border-left: none;
+                            border-top: 1px solid var(--rule); }
+}

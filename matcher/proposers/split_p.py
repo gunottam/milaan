@@ -119,6 +119,13 @@ class SplitProposer:
         # (`count_exact`).
         self._payouts: dict[str, set[tuple[str, tuple[str, ...]]]] = {}
         self._targets: dict[str, Paise] = {}
+        # The census behind the refusal sentence, kept as numbers rather than only
+        # as prose: `bank_line_id -> [(settlement_id, [divisions per payout])]`.
+        # §13 sets the census as a *figure* on the board — "279" at display size
+        # with the sentence under it — and a UI that had to regex it back out of
+        # `evidence[0]` would be parsing three different sentence shapes to recover
+        # a number this class already computed.
+        self.census: dict[str, list[tuple[str, list[int]]]] = {}
 
     def prepare(self, order: Sequence[BankLine], pools: Mapping[str, Pool],
                 claimed: frozenset[str], pass_no: int) -> None:
@@ -126,6 +133,7 @@ class SplitProposer:
         self.plan, self.refusals = {}, {}
         self.partners, self._anchors = {}, {}
         self._payouts, self._targets = {}, {}
+        self.census = {}
         lines = sorted(order, key=lambda b: b.bank_line_id)
         self._targets = {b.bank_line_id: target(b) for b in lines}
         anchors = [(sid, group) for sid, group in sorted(self._members.items())
@@ -277,6 +285,7 @@ class SplitProposer:
         second, seed 99's `bl_0041` the third.
         """
         census = self._census(bank_line_id)
+        self.census[bank_line_id] = census
         joint = " or ".join(sorted(self.partners.get(bank_line_id, ())))
         if len(census) == 1:
             sid, counts = census[0]

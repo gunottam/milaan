@@ -175,6 +175,17 @@ class LedgerException:
     # thing that knows how big the hole is. Kept apart from
     # `amount_at_risk_paise`, which is the whole credit and a different number.
     residual_paise: Paise | None = None
+    # For a `SPLIT_PAYOUT`, C3's census as numbers rather than only as prose:
+    # `[(settlement_id, [divisions per payout])]`. §13 sets the count as a figure —
+    # "279" at display size with the sentence under it — and the sentence has three
+    # shapes (§10's `_sentence`), so a reader that needed the number would be
+    # parsing prose to recover something the proposer already counted.
+    census: tuple[tuple[str, tuple[int, ...]], ...] = ()
+    # Up to two of the compositions that tie. The board shows them side by side, so
+    # a judge can see that the alternatives are real and differ by one transaction
+    # rather than take "2 balance" on trust. Truncated at two on purpose: the census
+    # above is the count, this is the evidence that they exist.
+    alternatives: tuple[tuple[str, ...], ...] = ()
 
     def as_dict(self) -> dict:
         return {
@@ -193,6 +204,8 @@ class LedgerException:
             "residual_paise": self.residual_paise,
             "risk_class": self.risk_class,
             "reverses": self.reverses,
+            "census": [[sid, list(counts)] for sid, counts in self.census],
+            "alternatives": [list(alt) for alt in self.alternatives],
         }
 
 
@@ -222,6 +235,8 @@ class _Draft:
     machine_dependent: bool = False
     residual_paise: Paise | None = None
     reverses: str | None = None
+    census: tuple[tuple[str, tuple[int, ...]], ...] = ()
+    alternatives: tuple[tuple[str, ...], ...] = ()
 
 
 def _confidence(draft: _Draft) -> str:
@@ -414,6 +429,11 @@ def _type_open_line(line: BankLine, steps: Sequence[Mapping], deadline_cut: bool
     if split is not None:
         alternatives = next((step["tied"] for step in steps
                              if step["tier"] == "C3" and step["tied"]), [])
+        # C3's own census, as numbers. The sentence below carries it in prose and
+        # the two must be the same figure, which is why both come off the same
+        # trace row rather than one being re-derived.
+        census = next((step.get("census") for step in steps
+                       if step["tier"] == "C3" and step.get("census")), None)
         draft = _Draft(
             line.bank_line_id, "SPLIT_PAYOUT", at_risk, age_days,
             blocked_on=("A bank advice naming the transactions behind each credit: "
@@ -434,7 +454,9 @@ def _type_open_line(line: BankLine, steps: Sequence[Mapping], deadline_cut: bool
             # `C2_MAX_POOL` or out of node budget), and there the evidence sentence
             # below still names the settlement.
             settlement_id=next((s for step in steps if step["tier"] == "C3"
-                                for s in step["anchors"]), None))
+                                for s in step["anchors"]), None),
+            census=tuple((sid, tuple(counts)) for sid, counts in (census or ())),
+            alternatives=tuple(tuple(alt) for alt in alternatives[:2]))
         draft.evidence.append(split.split(": ", 1)[-1])
         if alternatives:
             # **Not a count of what balances.** The sentence above carries that,
@@ -688,6 +710,7 @@ def build(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                 hypotheses_tried=d.hypotheses_tried,
                 evidence=tuple(d.evidence), settlement_id=d.settlement_id,
                 residual_paise=d.residual_paise, reverses=d.reverses,
+                census=d.census, alternatives=d.alternatives,
                 risk_class=risk_class(d.exception_type))
             for i, d in enumerate(drafts, start=1)),
         as_of=as_of,
