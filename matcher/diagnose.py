@@ -124,18 +124,37 @@ def diagnose(delta: Paise, composition: Iterable[str],
                              f"{delta:+d} paise is exactly {label} ({amount} paise), "
                              "unallocated")
 
-    # 4. δ ≤ len(composition), in paise — §4.3's dropped allocation remainder,
-    #    bounded by n − 1. Note this is *unreachable for a claim that reached G4*:
-    #    §8.2 accepts iff |δ| ≤ 100 AND |δ| ≤ n, so any rejected claim with |δ| ≤ n
-    #    must have |δ| > 100, which needs a composition of over a hundred items and
-    #    §15 caps payouts far below that. It fires on residuals that never met a
-    #    gate — an open line's own target against the pool — and that is why it is
-    #    kept rather than folded into G4.
-    if size and d <= size:
+    # 4. §4.3's dropped allocation remainder. **Two conditions, and the second one
+    #    is new at stage 17.**
+    #
+    #    `d <= size` alone is not a diagnosis, it is a restatement of G4's own
+    #    per-transaction cap: §8.2 accepts iff |δ| ≤ 100 *and* |δ| ≤ n, so a check
+    #    that fired on `d <= n` fired on every claim G4 was about to admit. Making
+    #    G4 require "a named cause" while this check answered "yes" to everything
+    #    would have been a gate that looked stricter and admitted exactly the same
+    #    set — which is how seeds 12 and 31 booked a `SETTLEMENT_CONTAMINATION` and
+    #    a `WITHHELD_RECORD` at −5 and +10 paise.
+    #
+    #    §4.3's remainder exists only where an allocation happened: a flat premium
+    #    split across the members by integer division, dropping `total % n`. That
+    #    leaves a signature in the fees themselves — the composition's actual fees
+    #    exceed what `expected_fee` computes by the premium — and I7 guarantees it
+    #    is on the transactions rather than in a settlement-level term, so it is
+    #    recomputable here. No allocation, no remainder to drop, no diagnosis.
+    #    Summed over the **whole composition**, not just the payments: §4.3 allocates
+    #    across every member, and a refund carries `fee_paise = 0` by construction
+    #    (§4.2), so any fee sitting on one is allocated premium by definition.
+    #    Payments-only reads 2,322 of 2,500 on `bl_0005` and misses the signature
+    #    entirely; all members reads 2,494 — short by exactly the dropped remainder.
+    allocated = sum(t.fee_paise for t in chosen) - sum(
+        expected_fee(t)[0] for t in payments)
+    if size and d <= size and abs(allocated - INSTANT_FLAT) <= size:
         return Diagnosis(
             "allocation_remainder",
             f"{delta:+d} paise over {size} transactions is within §4.3's dropped "
-            f"remainder of at most {size - 1} paise; retry via G4")
+            f"remainder of at most {size - 1} paise, and the composition carries "
+            f"{allocated} paise of allocated premium against a {INSTANT_FLAT} paise "
+            f"flat charge — the integer division that dropped it")
 
     # 5. δ equals some unclaimed transaction's net. The only check that can name a
     #    record — and §17's limit sits right here: two withheld transactions

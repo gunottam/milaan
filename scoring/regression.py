@@ -54,11 +54,20 @@ from matcher.run import MATCH_DEADLINE_MS, build_tiers, run_ladder
 from scoring.score import (all_lines, anchors_recovered, phase_e, precision,
                            recall, score)
 
-# Ten, fixed. Any set would do and this one is not special — which is the point:
-# picking seeds after seeing their numbers is how a variance figure stops being one.
-# 42, 7, 99 and 2026 are the seeds the suite already pins, kept first so a reader
-# can check a row against a test rather than against this file.
-SEEDS = (42, 7, 99, 2026, 1, 5, 13, 23, 101, 777)
+# **Thirty, fixed, and the twenty were added because the ten were not enough.**
+# Picking seeds after seeing their numbers is how a variance figure stops being one,
+# so these were fixed in advance and every one of them is reported. The first ten are
+# the original set — 42, 7, 99 and 2026 are what the suite pins, kept first so a
+# reader can check a row against a test rather than against this file.
+#
+# The twenty were added at stage 17 after an audit ran them and found four false
+# matches the ten did not contain: a G4 tolerance admission on 12 and 31, a G5 miss
+# on 10, and an unearned uniqueness stamp on 6. A precision figure that holds on ten
+# seeds and breaks on the eleventh was never a precision figure; the fix is more
+# seeds, permanently, not a better ten.
+SEEDS = (42, 7, 99, 2026, 1, 5, 13, 23, 101, 777,
+         2, 3, 4, 6, 8, 9, 10, 11, 12, 17,
+         31, 37, 55, 64, 88, 123, 256, 314, 500, 999)
 
 ROOT = Path("data/regression")
 COMMITTED = Path("data/runs/seed42")

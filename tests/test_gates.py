@@ -53,6 +53,17 @@ def claim(*entity_ids: str, anchor: str | None = None, window_days: int = 2) -> 
 TRIO = universe(payment("pay_1", 100, "setl_a"), payment("pay_2", 60, "setl_a"),
                 payment("pay_3", 40, "setl_a"))
 
+# The same three with §4.3's flat premium allocated across them — 833 paise each,
+# 2,499 of 2,500, the last paise dropped by the integer division. **G4 needs this
+# from stage 17**: the double cap bounds how wrong a match may be and says nothing
+# about why, so a residual is admitted only where `diagnose` can name a term that
+# accounts for it. Three bare payments carry no allocation, so a two-paise gap
+# between them is not a rounding artefact — it is two paise nobody can explain,
+# which is what seeds 12 and 31 of the thirty-seed sweep were.
+ALLOCATED = universe(payment("pay_1", 100, "setl_a", fee_paise=833),
+                     payment("pay_2", 60, "setl_a", fee_paise=833),
+                     payment("pay_3", 40, "setl_a", fee_paise=833))
+
 
 # --- G1 exclusivity ----------------------------------------------------------
 
@@ -115,11 +126,18 @@ def test_g2_rejects_a_delta_of_one_paise():
     must never do is call it exact — the verdict is stamped `tolerance` and counted
     on its own scoreboard line (§8.3).
     """
-    c, line = claim("pay_1", "pay_2", "pay_3"), bank_line(201)
-    assert g2_delta(c, line, TRIO) == -1
-    verdict = check(c, line, TRIO)
+    c = claim("pay_1", "pay_2", "pay_3")
+    # Net is gross − fee, so the allocated premium moves the target with it.
+    line = bank_line(201 - 3 * 833)
+    assert g2_delta(c, line, ALLOCATED) == -1
+    verdict = check(c, line, ALLOCATED)
     assert verdict.ok and verdict.confidence == "tolerance"
     assert verdict.delta_paise == -1 and verdict.tolerance == "applied"
+
+    # Same one paise, no allocation behind it: both caps clear and G4 still
+    # refuses, because nothing in the input accounts for the gap.
+    plain = check(c, bank_line(201), TRIO)
+    assert not plain.ok and plain.gate == "G4" and "unexplained" in plain.reason
 
 
 def test_g2_is_what_kills_a_clean_identifier_hit_that_does_not_balance():
@@ -167,11 +185,36 @@ def test_g3_is_the_same_function_the_oracle_applies():
 
 
 def test_g4_accepts_two_paise_across_three_transactions():
-    c, line = claim("pay_1", "pay_2", "pay_3"), bank_line(202)
-    assert g4_tolerance(c, g2_delta(c, line, TRIO)) is None
-    verdict = check(c, line, TRIO)
+    c = claim("pay_1", "pay_2", "pay_3")
+    line = bank_line(202 - 3 * 833)
+    # The caps alone, which is what `g4_tolerance` reports without transactions.
+    assert g4_tolerance(c, g2_delta(c, line, ALLOCATED)) is None
+    verdict = check(c, line, ALLOCATED)
     assert verdict.ok and verdict.confidence == "tolerance"
     assert verdict.delta_paise == -2 and verdict.tolerance == "applied"
+
+
+def test_g4_refuses_a_residual_inside_both_caps_that_nothing_explains():
+    """Stage 17, and the reason G4 stopped being a pure size test.
+
+    §8.2's caps bound how wrong a match may be. They do not say *why* it is wrong,
+    and `|delta| <= n` was the same condition `diagnose` used for an allocation
+    remainder — so requiring "a named cause" while that check answered yes to
+    everything would have admitted exactly the same set. Two paise across three
+    payments carrying no allocation is not rounding; it is two paise nobody can
+    account for, and I6 says that is a gap to report rather than a tolerance to
+    spend.
+    """
+    c, line = claim("pay_1", "pay_2", "pay_3"), bank_line(202)
+    delta = g2_delta(c, line, TRIO)
+    assert abs(delta) <= TOLERANCE_PAISE and abs(delta) <= 3      # both caps clear
+    assert g4_tolerance(c, delta) is None                          # caps alone: admit
+    reason = g4_tolerance(c, delta, TRIO)                          # with the input: refuse
+    assert reason and "unexplained" in reason
+    verdict = check(c, line, TRIO)
+    assert not verdict.ok and verdict.gate == "G4"
+    # Still monotonically restrictive: it only ever removes what G4 would have taken.
+    assert verdict.delta_paise == delta
 
 
 def test_g4_rejects_eighty_seven_paise_across_three_transactions():
@@ -262,7 +305,14 @@ def test_a_rejected_verdict_still_carries_its_delta():
 
 # One settlement plus two interchangeable cross-cycle strays: the only ambiguity
 # G3 permits, and the shape every ambiguous line in the generated data has.
-STRAYS = universe(payment("pay_1", 300, "setl_a"), refund("rfnd_1", 100, None),
+# `pay_1` nets 300 — 2,799 gross less §4.3's 2,499 allocated premium, the whole
+# ₹25 charge on one member with the last paise dropped. Every sum below is what it
+# always was; what the premium adds is a *cause* for the one-paise residual, which
+# G4 has required since stage 17. Without it `pay_1 + rfnd_3` clears both caps and
+# is still refused, and this file's G5 tests need a passing tolerance verdict to
+# have anything to rank.
+STRAYS = universe(payment("pay_1", 2_799, "setl_a", fee_paise=2_499),
+                  refund("rfnd_1", 100, None),
                   refund("rfnd_2", 100, None), refund("rfnd_3", 101, None))
 
 

@@ -240,6 +240,13 @@ function Ablation({ report, regression, provenance, onToggle }) {
       {measured ? (
         <span className="abl-key">
           agent <b>{delta}</b> across {measured.seeds} seeds
+          {/* Stamped on the page. The figure is carried from the pass that ran the
+              model — the shipped configuration has it off, and a run with the model
+              off cannot measure the model — so the board says so rather than
+              looking freshly measured. */}
+          {measured.live === false && (
+            <span className="provenance"> · {measured.measured_by}</span>
+          )}
         </span>
       ) : (
         <span className="abl-key">
@@ -358,15 +365,32 @@ export default function App() {
   const [regression, setRegression] = useState(null)
   const timer = useRef(null)
 
-  const poll = useCallback(async (runId) => {
-    const res = await fetch(`/api/runs/${runId}`)
-    const state = await res.json()
-    setRun(state)
-    if (state.status !== 'running') {
-      clearInterval(timer.current)
-      timer.current = null
-    }
+  const stop = useCallback(() => {
+    clearInterval(timer.current)
+    timer.current = null
   }, [])
+
+  // **A poll that throws leaves the board frozen and the interval running.**
+  // Measured: kill the API mid-run and the page sits on `RUNNING · 0 of —` with the
+  // Run button disabled, polling forever, an unhandled rejection in the console and
+  // nothing at all on screen. §9.10's whole argument is that a partial answer which
+  // reports itself beats a hang — that has to hold for the transport too, not only
+  // for the search.
+  const poll = useCallback(async (runId) => {
+    try {
+      const res = await fetch(`/api/runs/${runId}`)
+      if (!res.ok) throw new Error(`the run endpoint returned ${res.status}`)
+      const state = await res.json()
+      setRun(state)
+      if (state.status !== 'running') stop()
+    } catch (err) {
+      stop()
+      setRun((prev) => ({ ...(prev || {}), status: 'error',
+                          error: `lost contact with the API: ${err.message}. `
+                                 + 'The run may still be finishing on the server; '
+                                 + 'press Run again to start a new one.' }))
+    }
+  }, [stop])
 
   useEffect(() => () => clearInterval(timer.current), [])
 
@@ -378,19 +402,37 @@ export default function App() {
   }, [])
 
   async function start() {
-    clearInterval(timer.current)
+    stop()
     setRun({ status: 'running', phase: 'generating', progress: 0, notes: [],
              phases: [], closed_rows: [], report: null })
-    const res = await fetch('/api/runs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, seed: Number(form.seed),
-                             bank_lines: Number(form.bank_lines),
-                             records: Number(form.records) }),
-    })
-    const { run_id } = await res.json()
-    poll(run_id)
-    timer.current = setInterval(() => poll(run_id), POLL_MS)
+    // A non-numeric seed reaches the API as `null` and comes back 422. Reading
+    // `run_id` off that body yields `undefined`, the next poll 404s, and the board
+    // renders the landing page with no headline and no error — the user pressed Run
+    // and the page just looked slightly wrong. Check the status first and say so.
+    try {
+      const res = await fetch('/api/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, seed: Number(form.seed),
+                               bank_lines: Number(form.bank_lines),
+                               records: Number(form.records) }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        const why = Array.isArray(body.detail)
+          ? body.detail.map((d) => `${d.loc?.slice(1).join('.')}: ${d.msg}`).join('; ')
+          : body.detail || `the API returned ${res.status}`
+        setRun({ status: 'error', error: `that run was rejected — ${why}` })
+        return
+      }
+      const { run_id } = await res.json()
+      poll(run_id)
+      timer.current = setInterval(() => poll(run_id), POLL_MS)
+    } catch (err) {
+      setRun({ status: 'error',
+               error: `could not reach the API: ${err.message}. Is uvicorn running `
+                      + 'on port 8000?' })
+    }
   }
 
   const running = run?.status === 'running'

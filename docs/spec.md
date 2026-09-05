@@ -2,13 +2,14 @@
 
 **Project:** Milaan (मिलान) — settlement reconciliation agent
 **Event:** Razorpay Buildathon, Track 04 — AI Finance Controller
-**Version:** 1.3.1 — **FROZEN. Build against this document.**
+**Version:** 1.3.2 — **FROZEN. Build against this document.**
 **Companion:** `milaan-workflow.md` (narrative + worked example, still current)
 
 v1.3 merges 25 items: 5 review fixes, 13 edge-case findings (all ruled ACCEPT, §18),
 4 architectural reframes, 3 late additions. Changelog at §18.
 
-**v1.3.1 (stage 15) amends three claims** the ten-seed regression proved wrong: §3.2's
+**v1.3.2 (stage 17) amends four more** — §6.2's unearned `verified`, §8.2's G4, §11's seed
+count, and §9.9's failure direction. **§18.2** states each. **v1.3.1 (stage 15) amends three claims** the ten-seed regression proved wrong: §3.2's
 reversal-pair rule is a pre-match exclusion (§1, §3.2, §9.8), §15's Phase D allocation is not
 enforceable by §9.10's mechanism, and the 60 s ceiling is asserted for the ablated
 configuration only. **§18.1** states each one and what replaced it. Nothing else in v1.3
@@ -373,6 +374,33 @@ and two unclaimed settlements with identical totals, pass every filter. Any bije
 balances. Truth must mark the whole **set** unresolvable rather than asserting a specific
 assignment — otherwise scoring penalises an answer that is bookkeeping-identical to truth.
 
+### Amendment, v1.3.2 — `verified` must be earned, and a break injector may not assert it
+
+**A truth record claiming `uniqueness: "verified"` must contain a composition the gate
+actually enumerated.** That assertion should have shipped with §6.2 and did not, and the hole
+was not theoretical: `generator/breaks.py::rounding_drift` writes a *forced* record stamped
+`verified` and never calls `classify` at all.
+
+A `ROUNDING_DRIFT` line's recorded composition misses the credit by the drift, so an exact
+enumeration cannot contain it. Where a coincidental exact composition also sits in the
+window, truth certifies the line as uniquely determined while two compositions close it —
+and §9.3's exact-first rule means the matcher takes the other one. Seed 6's `bl_0079` is that
+line: 23 transactions recorded at −16 paise, a coincidental 24-transaction set at 0, and the
+tolerance pass that would have proposed the real answer never runs because
+`search_p.py::_search` falls through to it *only if the exact pass returned nothing*.
+
+`generator/uniqueness.py::audit_verified` runs after the forced records are merged and checks
+membership. **The enumeration is not widened to make truth's answer appear — it is made
+faithful to §9.3**, running exact-then-tolerance under the same condition the matcher applies.
+That distinction is the whole fix: an exact-only check refuses all 150 `ROUNDING_DRIFT` lines
+across thirty seeds, including the ~149 working exactly as designed; the two-pass rule refuses
+one, and it is the broken one.
+
+A record that fails is downgraded to `uniqueness: "unproven"` with `uniqueness_refuted: true`
+— composition known, uniqueness not established, an existing disclosed bucket held out of the
+headline (§11). Nothing is dropped, no denominator shrinks, and `truth.json` carries the list
+by name.
+
 ### 6.3 The oracle must be checked — finding 8.9
 
 The gate uses the same solver the matcher uses. A solver bug that misses a second solution
@@ -445,7 +473,7 @@ over `proposer.name`, not a special case for the model.
 | **G1** exclusivity | Every cited entity exists, is unclaimed, and lies within the permitted window | Reject, `reason="stale or unknown entity"` |
 | **G2** arithmetic | `Σ net_contribution(composition) == target(line)` | Fall to G4 |
 | **G3** coherence | Composition shape is a plausible payout, §9.4 | Reject, `reason="spans N partial settlements"` |
-| **G4** tolerance | Only if G2 failed. §8.3 double cap | Reject → unresolved |
+| **G4** tolerance | Only if G2 failed. §8.2's double cap **and a named cause** (v1.3.2) | Reject → unresolved |
 
 **G5 uniqueness is not part of `check()`.** It is a predicate over the *set* of passing
 verdicts for a line, applied by the orchestrator. It never approves anything — it withdraws
@@ -473,10 +501,50 @@ produces a false match rather than a missed one.
 ```
 accept iff  abs(delta_paise) <= TOLERANCE_PAISE      # 100 paise = ₹1.00
       and   abs(delta_paise) <= len(composition)     # ≤ 1 paise per transaction
+      and   diagnose(delta, composition).code in G4_EXPLAINS      # v1.3.2
 ```
 
-Both conditions. A ₹0.87 delta across three transactions is not rounding, it is a wrong
-subset.
+All three. A ₹0.87 delta across three transactions is not rounding, it is a wrong subset.
+
+### Amendment, v1.3.2 — a small delta is not an explanation
+
+**The two caps bound how wrong a match may be. They say nothing about why, and that is
+what G4 was admitting on.** A thirty-seed sweep found two false matches of exactly this
+shape: `bl_0104` on seed 12, a `SETTLEMENT_CONTAMINATION` closed at −5 paise, and `bl_0057`
+on seed 31, a `WITHHELD_RECORD` closed at +10 paise. Both inside both caps. In each case a
+record was **missing** and G4 absorbed it into the answer, which is the one thing I6 forbids
+— *nothing is silently absorbed* — and the failure §1 reserves for G4 alone.
+
+So the residual must also match a term the input can name. `matcher/diagnose.py` already
+computed six; the accepting set is five of them:
+
+| accepted | why |
+|---|---|
+| `tds_term_missing` | a withheld tax the target ignored |
+| `gst_not_applied` | the fee was deducted and its tax was not |
+| `instant_settlement_premium` | the ₹25 flat charge, unallocated |
+| `allocation_remainder` | §4.3's integer division, **and an allocation to back it** |
+| `fx_markup_not_applied` | the markup that folds into `fee_paise` (I7) |
+
+`likely_specific_missing_record` is **excluded, and that exclusion is the point of the
+list**: accepting a match because the gap is the size of a transaction nobody claimed is
+absorbing the missing record. So is `no_matching_residual` — "nothing accounts for it" is
+not a reason to accept.
+
+**`allocation_remainder` had to be tightened for any of this to mean anything.** It fired on
+`|delta| <= len(composition)`, which is §8.2's own second cap restated — so it answered yes
+to every claim G4 was about to admit, and requiring "a named cause" would have admitted
+precisely the same set. §4.3's remainder exists only where a flat premium was split by
+integer division, and that leaves a signature in the fees: the composition's actual fees
+exceed `expected_fee` by the premium, summed over **all** members because §4.3 allocates
+across refunds too and a refund carries `fee_paise = 0` by construction. No allocation, no
+remainder, no diagnosis.
+
+**Still monotonically restrictive**, so §1's taxonomy is unchanged: the rule only removes
+candidates G4 would previously have taken. Measured cost across seven seeds: zero recall
+change on five, +0.87 pt on seed 12 (the false match freed transactions a real line needed),
+−0.89 pt on seed 31. Every legitimate `ROUNDING_DRIFT` closure survives — the tolerance
+counts are identical, 5 → 5 on seed 42.
 
 ### 8.3 Reporting
 
@@ -1150,6 +1218,41 @@ non-negotiable.
 
 **Correction to earlier prose:** an exception can name the *settlement* and the *gap*, not the
 missing record. Recorded in §17.
+
+---
+
+## 18.2 Amendments, v1.3.1 → v1.3.2 (stage 17)
+
+Four, all forced by an adversarial pass that ran twenty seeds beyond the harness ten and
+found four false matches the ten did not contain. `docs/journal/stage-17.md`.
+
+1. **`verified` must be earned** (§6.2). A break injector may determine a record the gate
+   cannot; it may not assert an enumeration that never ran. `audit_verified` checks
+   membership under §9.3's own two-pass rule.
+2. **G4 requires a named cause, not just a small delta** (§7.3, §8.2). Two of the four false
+   matches were a missing record absorbed inside the tolerance band. Still monotonically
+   restrictive; measured recall cost ≈ 0.
+3. **The regression harness runs thirty seeds, not ten** (§11). A precision figure that holds
+   on ten and breaks on the eleventh was never a precision figure.
+4. **§9.9's greedy caveat is stated in the wrong direction** — see below. Not fixed.
+
+### §9.9, restated: greedy assignment can also manufacture a false match
+
+§9.9 says greedy commitment "can produce a globally worse assignment" — that is, cost recall.
+Seed 10's `bl_0002` shows the other direction. Truth records two exact, G3-passing
+compositions; they differ by one transaction, `disp_90007`; `bl_9014` claimed it before C1
+reached the line; so only one composition was still constructible, G5 had nothing to tie
+against, and the matcher committed one of two indistinguishable answers.
+
+**That contradicts §1**, which reserves admitting a wrong answer to G4. An earlier commit can
+destroy the evidence of ambiguity, and the line then looks determined when it is not.
+
+A mitigation exists inside the greedy model: test uniqueness against the *unfiltered* window
+pool — the one that still holds what earlier lines took — and refuse when two compositions
+exist there even though G1 leaves one. Monotonically restrictive. Measured on three seeds it
+fires once, kills exactly that false match and costs zero true matches. It is **not built**;
+it adds an enumeration per closed line to a run already at 46 s of a 60 s ceiling, and the
+trade needs measuring across all thirty before it ships.
 
 ---
 

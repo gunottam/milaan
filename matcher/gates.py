@@ -19,6 +19,7 @@ from collections.abc import Mapping, Set
 from core.coherence import is_plausible_payout
 from core.models import BankLine, GatewayTxn, target
 from core.money import Paise, in_window, ist_date, window_key
+from matcher.diagnose import diagnose
 from matcher.proposers.base import Claim
 
 TOLERANCE_PAISE = 100           # §8.2 — ₹1.00
@@ -143,14 +144,42 @@ def g4_outcome(claim: Claim, delta: Paise) -> str:
     return "applied"
 
 
-def g4_tolerance(claim: Claim, delta: Paise) -> str | None:
-    """§8.2's double cap, applied only when G2 came up non-zero.
+# The residuals G4 will admit, by name. Each is a term the input can account for:
+# a withheld tax, a tax not applied, a flat premium, the integer remainder of one.
+#
+# **`likely_specific_missing_record` is deliberately not here**, and it is the whole
+# point of the list. That diagnosis says a record is *missing*; admitting a match
+# because the gap is the size of a transaction nobody claimed is absorbing the
+# missing record into the answer, which is the failure §1 reserves for G4 alone.
+# Neither is `no_matching_residual`: "nothing in the input accounts for it" is not
+# a reason to accept.
+G4_EXPLAINS = frozenset({"tds_term_missing", "gst_not_applied",
+                         "instant_settlement_premium", "allocation_remainder",
+                         "fx_markup_not_applied"})
 
-    The sole non-monotonic gate: every other gate can only cost recall, this one
-    can admit a wrong answer. Both conditions, never either — ₹0.87 across three
-    transactions is within ₹1 and is still a wrong subset, not rounding.
 
-    The reason and the label come from one classification, so they cannot disagree.
+def g4_tolerance(claim: Claim, delta: Paise,
+                 txns: Mapping[str, GatewayTxn] | None = None) -> str | None:
+    """§8.2's double cap **and a named cause**, applied when G2 came up non-zero.
+
+    The sole non-monotonic gate: every other gate can only cost recall, this one can
+    admit a wrong answer. Both caps, never either — ₹0.87 across three transactions
+    is within ₹1 and is still a wrong subset, not rounding.
+
+    **A small delta is not an explanation (stage 17).** The caps bound how wrong a
+    match may be; they say nothing about *why*. Seeds 12 and 31 of the thirty-seed
+    sweep are what that costs: a `SETTLEMENT_CONTAMINATION` at −5 paise and a
+    `WITHHELD_RECORD` at +10 paise, both inside both caps, both admitted, both
+    false matches — a missing record absorbed into a match rather than reported as
+    a gap (I6). So the residual must also match one of `G4_EXPLAINS`: a term
+    `matcher/diagnose.py` can name from the input.
+
+    Still monotonically restrictive. The rule only ever removes candidates G4 would
+    previously have admitted, so a wrong list here costs recall and cannot approve
+    anything new.
+
+    `txns` is optional so the two dozen unit tests that exercise the caps alone keep
+    working; when it is absent only the caps apply, and `check()` always passes it.
     """
     match g4_outcome(claim, delta):
         case "over_rupee_cap":
@@ -158,4 +187,11 @@ def g4_tolerance(claim: Claim, delta: Paise) -> str | None:
         case "over_per_txn_cap":
             return (f"delta of {delta} paise over {len(claim.composition)} transactions "
                     "is more than one paise each; that is a wrong subset, not rounding")
+    if txns is not None:
+        finding = diagnose(delta, claim.composition, txns)
+        if finding.code not in G4_EXPLAINS:
+            return (f"delta of {delta} paise is within both caps but unexplained: "
+                    f"{finding.detail}. §8.2 bounds how wrong a match may be; it "
+                    "does not say why, and an unexplained residual is a gap to "
+                    "report, not a tolerance to spend")
     return None

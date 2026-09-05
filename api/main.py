@@ -25,6 +25,7 @@ import threading
 import time
 import uuid
 from collections.abc import Mapping
+from typing import Literal
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -80,7 +81,10 @@ class RunRequest(BaseModel):
     seed: int = 42
     bank_lines: int = Field(default=120, ge=1, le=400)
     records: int = Field(default=3_000, ge=10, le=20_000)
-    noise: str = "high"
+    # The same three the CLI accepts (`generate.py`'s `choices=`). Unvalidated, a
+    # typo reached `NOISE_PROFILES[...]` and the board rendered `KeyError: 'loud'`
+    # as its error message — a Python repr where a sentence belongs.
+    noise: Literal["low", "medium", "high"] = "high"
     use_llm: bool = False
 
 
@@ -186,9 +190,14 @@ def build_report(run_dir: Path, deadline_ms: int | None = MATCH_DEADLINE_MS,
         if on_tier is not None:
             on_tier(name, pass_no, count, closed_rows(matched, lines))
 
-    ladder = run_ladder(txns, bank_lines, truth["config"]["window_days"],
-                        tiers=build_tiers(txns, truth["config"]["window_days"],
-                                          detective=detective),
+    # **§15's constant, not `truth["config"]["window_days"]`.** They are the same
+    # number on every board ever generated, but one of them is read out of the
+    # answer key and handed to the matcher. `matcher/` cannot reach `truth.json`
+    # (I3) and the path that runs it should not smuggle a value across on its
+    # behalf — in production there is no truth file to read it from.
+    window_days = SETTLEMENT_WINDOW_DAYS
+    ladder = run_ladder(txns, bank_lines, window_days,
+                        tiers=build_tiers(txns, window_days, detective=detective),
                         deadline_ms=deadline_ms,
                         on_tier=announce if on_tier is not None else None)
     compositions = {bid: claim.composition
@@ -205,7 +214,12 @@ def build_report(run_dir: Path, deadline_ms: int | None = MATCH_DEADLINE_MS,
     from detective.schema import Usage
     phase_d = [t for t in ladder.tiers if getattr(t, "name", "") in ("D1", "D2")]
     total_usage = sum((t.usage for t in phase_d), start=Usage())
-    detective_ran = any(t.usage.calls for t in phase_d)
+    # **Hypotheses, not calls.** A 429 is a call: with a rate-limited or invalid key
+    # the tiers report 8 calls, 0 hypotheses and 0 paise, and `any(calls)` then
+    # stamped `detective_ran: true` and published `full_recall` — a "with agent"
+    # figure for an agent that answered nothing. `scoring/regression.py` was fixed
+    # for exactly this at stage 14 and this path was not.
+    detective_ran = any(t.hypotheses for t in phase_d)
     tiers = {tier for tier, _, _ in ladder.matched.values()}
 
     # §9.4: accepted matches spanning more than one settlement are flagged

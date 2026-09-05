@@ -4,8 +4,8 @@ Settlement reconciliation agent. Given a bank statement, a Razorpay gateway ledg
 order list, it determines what composes every bank line, proves it to the paisa, and refuses
 honestly when it cannot.
 
-Full spec: `docs/spec.md` — frozen v1.3, **amended v1.3.1 at §18.1**. Read §18.1 before
-quoting §15's budget table or §3.2. Narrative + worked example: `docs/workflow.md`.
+Full spec: `docs/spec.md` — frozen v1.3, **amended v1.3.1 (§18.1) and v1.3.2 (§18.2)**.
+Read both before quoting §6.2, §8.2, §9.9, §11 or §15's budget table. Narrative + worked example: `docs/workflow.md`.
 Build stages: `docs/build-stages.md`. **Read only the spec sections a stage names.**
 
 ---
@@ -37,10 +37,16 @@ pytest tests/test_subsetsum.py   # includes the brute-force property test
 ```
 
 ```bash
-python -m scoring.regression          # ten seeds -> regression.json. ~10 min cached, ~30 cold
+python -m scoring.regression          # THIRTY seeds -> regression.json. ~20 min cached, ~60 cold
 python -m scoring.regression --table  # re-render the committed file, runs nothing
 (cd web && node check-strip.mjs)      # the JSX structural claims, no browser, no jsdom
 ```
+
+**Thirty seeds, not ten, since v1.3.2.** The ten were clean and the eleventh was not: twenty
+fresh seeds produced four false matches in four different mechanisms. A precision figure that
+holds on ten and breaks on the eleventh was never a precision figure. Adding seeds after
+seeing their numbers would be the cardinal sin, so the thirty are fixed and every one is
+reported — including the ones that still fail.
 
 The regression's accuracy columns are **node budget only, no wall clock** — reproducible, so
 a differing figure is a real change. Its `live s` column is the only clock in the file and it
@@ -122,6 +128,18 @@ two verdicts tie.
 **G4 is the only gate that can admit a wrong answer.** Every other gate can only cost recall.
 Treat changes to it with suspicion.
 
+**G4 needs a named cause, not just a small delta** (v1.3.2). The two caps bound how wrong a
+match may be and say nothing about why; a thirty-seed sweep found two false matches that were
+a *missing record* absorbed inside the band. The residual must also match one of
+`matcher/gates.py::G4_EXPLAINS` — a term `diagnose` can name. `likely_specific_missing_record`
+is excluded on purpose: accepting because the gap is the size of an unclaimed transaction is
+absorbing the missing record.
+
+**Greedy assignment can manufacture a false match, not only cost recall** (§18.2). An earlier
+commit can consume the transactions of a second composition, so G5 has nothing to tie against
+and a genuinely ambiguous line looks determined. §9.9 states the recall direction only. Seed
+10's `bl_0002` is the case; the mitigation is measured and not built.
+
 ---
 
 ## Do not
@@ -144,6 +162,13 @@ Treat changes to it with suspicion.
   declined. It needs C3 to commit a division the source data does not determine — two
   identical refunds per pair, so the committed division is a false match half the time.
   `docs/journal/stage-14.md` and `scoring/regression.py::SCORING_RULE`.
+- **Do not let a break injector assert `uniqueness: "verified"`.** It is a claim about an
+  enumeration, and `generator/uniqueness.py::audit_verified` will now catch one that never
+  ran. A forced record may say a line is *unresolvable* — that needs no search — but not that
+  it is uniquely determined.
+- **Do not widen an enumeration to make an assertion pass.** The uniqueness audit runs §9.3's
+  exact-then-tolerance rule because that is what the matcher runs. Exact-only refuses 150
+  working `ROUNDING_DRIFT` lines; anything wider certifies the one that is broken.
 - **Do not scaffold future stages.** Build only the stage you were given.
 - **Do not write excessive comments.** Docstrings on public functions; skip narration.
 

@@ -14,9 +14,10 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from core.coherence import book_shape, is_plausible_payout
-from core.models import BankLine, GatewayTxn, target
+from core.models import BankLine, GatewayTxn, target, window_pool
 from core.money import window_key
-from core.subsetsum import SearchBudgetExceeded, solve_exact
+from core.subsetsum import (SearchBudgetExceeded, solve_exact,
+                            solve_tolerance)
 from generator.config import UNIQUENESS_NODE_BUDGET_OFFLINE
 
 
@@ -75,6 +76,77 @@ def classify(line: BankLine, txns: dict[str, GatewayTxn], pool: list[GatewayTxn]
         "composition": sorted(solutions[0]),
         "injected_breaks": [], "expected_delta_paise": 0,
     }
+
+
+def audit_verified(records: dict[str, dict], lines: dict, txns: dict,
+                   all_txns, window_days: int,
+                   budget: int = UNIQUENESS_NODE_BUDGET_OFFLINE) -> list[str]:
+    """**Every `uniqueness: "verified"` record must contain a composition the gate
+    actually found.** Returns the bank line ids that failed and downgrades them.
+
+    This is the assertion that should have shipped with §6.2 and did not, and the
+    hole it leaves is not theoretical — `generator/breaks.py::rounding_drift`
+    stamps `verified` by fiat and never calls `classify` at all. A ROUNDING_DRIFT
+    line's recorded composition misses the credit by the drift, so the exact
+    enumeration cannot contain it; where a *coincidental* exact composition also
+    sits in the window, truth certifies a line as uniquely determined when two
+    compositions close it and the matcher will take the other one. Seed 6's
+    `bl_0079` is that line: 23 transactions recorded at −16 paise, a coincidental
+    24-transaction set at 0, and §9.3's exact-first rule means the tolerance pass
+    that would have proposed the real answer never runs.
+
+    **The enumeration is not widened to make truth's answer appear — it is made
+    faithful to §9.3.** The matcher runs `solve_exact` and falls through to the
+    tolerance pass *only if that returned nothing*
+    (`matcher/proposers/search_p.py::_search`), so the set of compositions the
+    matcher will ever consider is exactly: the exact solutions, or — when there are
+    none — the minimum-|delta| ones. A gate that enumerated only exact balances
+    would refuse every ROUNDING_DRIFT line, including the ~145 of 150 that close
+    correctly through G4 and are working as designed; a gate that enumerated
+    everything within tolerance regardless would certify `bl_0079`, which is the
+    line that is actually broken. The two-pass rule is what separates them, and it
+    is not a widening: it is the gate asking the question the matcher will answer.
+
+    A record that fails is downgraded to `unproven` — composition known, uniqueness
+    not established — an existing disclosed bucket held out of the headline (§11).
+    Nothing is dropped and no denominator shrinks; the line stops claiming a
+    certification it does not have.
+    """
+    failed = []
+    for bank_line_id, rec in sorted(records.items()):
+        if rec.get("uniqueness") != "verified" or not rec.get("composition"):
+            continue
+        line = lines.get(bank_line_id)
+        if line is None:
+            continue
+        pool = window_pool(line, all_txns, window_days)
+        seen = {t.entity_id for t in pool}
+        pool = pool + [txns[e] for e in rec["composition"]
+                       if e in txns and e not in seen]
+        keep = lambda c: is_plausible_payout(c, txns)      # noqa: E731 — §9.3's filter
+        try:
+            solutions = solve_exact(pool, target(line), budget, keep=keep)
+            if not solutions:
+                # §9.3's second pass, and only under the condition the matcher
+                # applies it: exact returned nothing.
+                solutions = [c for c, _ in solve_tolerance(
+                    pool, target(line), budget, keep=keep)]
+        except SearchBudgetExceeded:
+            solutions = []
+        want = set(rec["composition"])
+        if any(set(s) == want for s in solutions):
+            continue
+        failed.append(bank_line_id)
+        rec["uniqueness"] = "unproven"
+        rec["uniqueness_refuted"] = True
+        rec["unresolvable_reason"] = (
+            "The recorded composition is not among the compositions §9.3's search "
+            f"reaches for this credit ({len(solutions)} found). Another composition "
+            "closes the line at a smaller |delta|, so the exact pass returns it and "
+            "the tolerance pass that would propose this one never runs. Stamped "
+            "`verified` without being enumerated — see "
+            "generator/uniqueness.py::audit_verified.")
+    return failed
 
 
 def mark_duplicate_targets(bank_lines: Iterable[BankLine], records: dict[str, dict]) -> int:

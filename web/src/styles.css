@@ -712,6 +712,12 @@ table.reg.summary td.range { color: var(--ink-soft); text-align: left;
 .reg-claims { list-style: none; padding: 0; margin: 10px 0 0; }
 .reg-claims li { font-size: 13px; color: var(--ink-soft); margin-bottom: 6px;
                  max-width: 74em; }
+/* Where a figure was measured, set apart from the figure. Carried numbers are
+ * legitimate — a run with the model off cannot measure the model — but they must
+ * not read as freshly taken. */
+.provenance { color: var(--ink-soft); font-size: 11px; letter-spacing: 0.02em; }
+.ablation .provenance { font-size: 10px; }
+
 .reg-claims li.clean b { color: var(--tally); }
 .reg-claims li.broken b { color: var(--break); }
 

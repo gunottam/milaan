@@ -145,10 +145,10 @@ def test_the_full_ladder_closes_99_of_134(full):
 
 
 def payment(entity_id: str, amount: int, settlement_id: str | None,
-            utr: str | None = None, day: str = DAY) -> GatewayTxn:
+            utr: str | None = None, day: str = DAY, **kw) -> GatewayTxn:
     return GatewayTxn(entity_id=entity_id, type="payment", amount_paise=amount,
                       settlement_id=settlement_id, settlement_utr=utr,
-                      settled_at=f"{day}T18:30:00+05:30")
+                      settled_at=f"{day}T18:30:00+05:30", **kw)
 
 
 def refund(entity_id: str, amount: int, settlement_id: str | None,
@@ -260,8 +260,13 @@ def test_the_tolerance_pass_closes_an_allocation_remainder():
     Exact search finds nothing; the tolerance pass finds the composition two paise
     short, and G4's double cap admits it because two paise over three transactions
     is one each."""
-    pool = [payment("pay_a1", 5_000, "setl_a", UTR),
-            payment("pay_a2", 3_000, "setl_a", UTR), refund("rfnd_x", 1_000, None)]
+    # 2,499 paise of §4.3's 2,500 flat premium, split 1,250/1,249 across the two
+    # payments — the allocation whose dropped paise the drift *is*. Stage 17: G4
+    # admits a residual only where `diagnose` can name a cause, and a bare
+    # two-paise gap between three transactions is not one.
+    pool = [payment("pay_a1", 6_250, "setl_a", UTR, fee_paise=1_250),
+            payment("pay_a2", 4_249, "setl_a", UTR, fee_paise=1_249),
+            refund("rfnd_x", 1_000, None)]
     txns = {t.entity_id: t for t in pool}
     line = bank_line(7_002, ref_no=UTR)
 
@@ -275,7 +280,12 @@ def test_g5_refuses_a_tolerance_tie():
     """§9.3: a wider band makes ambiguity more likely, so G5 applies to tolerance
     matches identically. Two strays one paise either side of the residual tie at
     |1| and neither is an answer."""
-    pool = [payment("pay_a1", 8_000, "setl_a", UTR),
+    # The premium is here for the same reason it is in the test above: from stage 17
+    # G4 admits a residual only where `diagnose` names a cause, and a tie between
+    # two candidates neither of which G4 would take is not a G5 tie — it is two
+    # rejections. The allocation makes both candidates admissible so G5 has
+    # something to rank, which is what this test is about.
+    pool = [payment("pay_a1", 10_499, "setl_a", UTR, fee_paise=2_499),
             refund("rfnd_x", 999, None), refund("rfnd_y", 1_001, None)]
     txns = {t.entity_id: t for t in pool}
     line = bank_line(7_000, ref_no=UTR)

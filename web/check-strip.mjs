@@ -91,6 +91,9 @@ const REG = {
 // their difference to the model's round trips must not appear.
 const SHIPPED = {
   ...REG,
+  harness: { ...REG.harness,
+             phase_d: { measured_by: 'stage 14 — ten seeds, live Groq', live: false,
+                        seeds: 10, seeds_model_answered: 6, extra_lines_closed: 0 } },
   live: [{ seed: 42, total_s: 21.4, total_ablated_s: 21.4 },
          { seed: 7, total_s: 19.8, total_ablated_s: 19.8 }],
   summary: { ...REG.summary,
@@ -224,7 +227,11 @@ ok('and priced — it says how much recall it cost',
 ok('with Phase D off the ablation comparison is not printed',
    !shipped.includes('Ablated') && !shipped.includes("round trips"))
 ok('and the board says which configuration it is instead',
-   shipped.includes('use_llm: false') && shipped.includes('zero extra lines'))
+   shipped.includes('use_llm: false') && shipped.includes('0 extra'))
+// Stage 17: a carried figure must say it was carried. The JSON has always been
+// stamped; the board rendered it bare, which read as freshly measured.
+ok('a carried measurement is stamped on the page, not only in the file',
+   shipped.includes('stage 14') && shipped.includes('carried, not re-measured'))
 ok('double rule under the summary \u2014 \u00a713 ledger convention',
    regression.includes('class="double-under"'))
 ok('nothing here expands, sorts or fetches',

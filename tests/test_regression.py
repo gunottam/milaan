@@ -17,8 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from scoring.regression import (SCORING_RULE, aggregate, dataset, render,
-                                spread)
+from scoring.regression import (COMMITTED, SCORING_RULE, aggregate, dataset,
+                                render, spread)
 
 
 def row(seed: int, *, recall: float, headline: float = 1.0, fp: int = 0,
@@ -217,8 +217,15 @@ def test_the_committed_board_is_the_seed_42_row():
     Generation is deterministic, so a copy would hold the same bytes — but the row
     a reader checks first is the one the slow set pins, and pointing at that
     directory is the only thing that stops the two drifting.
+
+    **`COMMITTED`, not `dataset(42)`.** This asserts a path and nothing else, and
+    calling the loader to find it out cost a 40M-node generation and ~1 MB on disk
+    every time the *fast* sweep ran on a machine without the board — which is why a
+    clean clone measured 73 s against the 17 s CLAUDE.md advertises. A test that
+    checks a constant must not build a dataset to do it.
     """
-    assert dataset(42).as_posix() == "data/runs/seed42"
+    assert COMMITTED.as_posix() == "data/runs/seed42"
+    assert dataset.__defaults__ is not None      # the loader still takes a root
 
 
 def test_the_shipped_regression_file_matches_the_harness_that_wrote_it():

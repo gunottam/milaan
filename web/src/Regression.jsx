@@ -35,6 +35,7 @@ export default function Regression({ data, lead }) {
   // is something to compare. From stage 15 the shipped configuration is Phase D
   // off, and then the two clocks are the same run — a sentence attributing their
   // difference to the model's round trips would be explaining a difference of zero.
+  const phaseD = harness.phase_d
   const ablated = summary.live_total_ablated_s
   const ablationMeasured = ablated?.mean != null
     && summary.live_total_s?.mean != null
@@ -140,9 +141,10 @@ export default function Regression({ data, lead }) {
         <li className={fp.clean_on_every_seed ? 'clean' : 'broken'}>
           <b>{fp.total} false matches across {seeds.length} seeds</b> —{' '}
           {fp.clean_on_every_seed
-            ? 'precision reads 100.0% on every seed. A false match books a wrong '
-              + 'figure silently and propagates to GST and revenue, so this is the '
-              + 'figure that stops a stage rather than a figure that trends.'
+            ? `precision reads ${pct(summary.all_lines_precision.min)} on every seed. `
+              + 'A false match books a wrong figure silently and propagates to GST '
+              + 'and revenue, so this is the figure that stops a stage rather than a '
+              + 'figure that trends.'
             : `NOT CLEAN: ${Object.entries(fp.per_seed)
                 .filter(([, n]) => n).map(([s, n]) => `seed ${s}: ${n} FP`).join(', ')}`}
         </li>
@@ -155,6 +157,19 @@ export default function Regression({ data, lead }) {
               ? ` — BREACHED on ${breached.length} of ${live.length} seeds: `
                 + breached.map((r) => `seed ${r.seed} at ${secs(r.total_s)}`).join(', ')
               : ', measured across every seed rather than asserted from one'}.
+            {/* **The range on this box, not a settled margin.** Re-measuring the ten
+                harness seeds three hours later on the same machine came back 1.45–
+                1.75× slower — mean 19.2s → 30.3s — with most of it in generation.
+                §11 says the clock is a property of the machine; the board should say
+                which machine and when, not imply headroom that travels. */}
+            <span className="provenance">
+              {' '}One box, one afternoon: these seconds are a property of this
+              machine (§11) and re-measuring the same seeds hours later moved them
+              1.45–1.75×. Read the range, not the margin — and{' '}
+              {Math.round(100 * (live.reduce((m, r) => Math.max(m, r.generate_s || 0), 0)
+                / Math.max(...live.map((r) => r.total_s))))}% of the slowest run is
+              generation, which is the fixture rather than the reconciler.
+            </span>
             {ablationMeasured ? (
               <>
                 {' '}Ablated — Phase D filtered out of the tier list, same data and
@@ -167,11 +182,22 @@ export default function Regression({ data, lead }) {
               <>
                 {' '}Phase D is off, so the two clock columns are the same run: this
                 is the configuration the board ships (<span className="mono">
-                use_llm: false</span>). §15&apos;s 12s Phase D allocation is not
+                use_llm: false</span>). §15&apos;s Phase D allocation is not
                 enforceable — the run deadline is checked between tiers and cannot
-                interrupt a batch in flight — and Phase D closed zero extra lines on
-                every seed measured, so the budget it would enforce is one nothing
-                wants to spend.
+                interrupt a batch in flight
+                {phaseD && <> — and it closed <b>{phaseD.extra_lines_closed} extra
+                lines</b> across {phaseD.seeds} seeds
+                {phaseD.seeds_model_answered != null
+                  && ` (the model answered on ${phaseD.seeds_model_answered})`}
+                , so the budget it would enforce is one nothing wants to spend</>}.
+                {/* The stamp, on the page and not only in the file. This figure is
+                    carried from the pass that measured it, and a board that rendered
+                    it bare would look like it had just been measured here. */}
+                {phaseD && (
+                  <span className="provenance"> Measured: {phaseD.measured_by}
+                    {phaseD.live === false && ' — carried, not re-measured by this run'}.
+                  </span>
+                )}
               </>
             )}
           </li>

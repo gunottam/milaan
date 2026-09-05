@@ -14,7 +14,8 @@ from core.money import IST
 from generator import config as cfg
 from generator.breaks import BREAK_COUNTS, inject
 from generator.entities import Dataset, build
-from generator.uniqueness import classify, mark_duplicate_targets
+from generator.uniqueness import (audit_verified, classify,
+                                  mark_duplicate_targets)
 
 
 def _cell(value: object) -> str:
@@ -70,6 +71,12 @@ def build_truth(data: Dataset, seed: int, noise: str, window_days: int,
             line, by_id, pool, settlement.entity_ids, budget)
 
     records.update(forced)
+    # **After `forced`, because `forced` is where the unearned stamps come from.**
+    # A break injector may legitimately determine a record the gate cannot — a
+    # withheld source record is unresolvable whatever the solver finds — but it may
+    # not assert `verified`, which is a claim about an enumeration, without one
+    # having been run. `audit_verified` downgrades any that cannot back the claim.
+    refuted = audit_verified(records, lines, by_id, data.txns, window_days, budget)
     for bank_line_id, codes in line_breaks.items():
         if bank_line_id in records:
             existing = records[bank_line_id].get("injected_breaks", [])
@@ -83,6 +90,9 @@ def build_truth(data: Dataset, seed: int, noise: str, window_days: int,
                                                     if e in by_id))
     ambiguous = sum(1 for r in records.values()
                     if "AMBIGUOUS_SUBSET" in r.get("injected_breaks", []))
+    # Reported, never silent. A truth file that quietly downgraded its own records
+    # would be a worse oracle than one that never checked (§11).
+    uniqueness_refuted = sorted(refuted)
 
     return {
         "seed": seed,
@@ -96,6 +106,10 @@ def build_truth(data: Dataset, seed: int, noise: str, window_days: int,
                    "noise": noise, "window_days": window_days,
                    "uniqueness_node_budget": budget},
         "bank_lines": records,
+        # §6.2's own audit: lines that claimed `verified` and could not back it.
+        # A generator defect, named on the record rather than fixed by widening the
+        # enumeration until the claim came true.
+        "uniqueness_refuted": uniqueness_refuted,
         "settlements": settlement_notes or {},
         "orders": {t.order_id: {"linked_payment": t.entity_id}
                    for t in data.txns if t.type == "payment" and t.order_id},

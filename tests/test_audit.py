@@ -260,10 +260,27 @@ def test_the_instant_premium_is_named_flat_and_with_gst():
 
 
 def test_the_allocation_remainder_is_named():
-    """§4.3's dropped remainder, bounded by n − 1. Unreachable for a claim that
-    reached G4 — §8.2 would have accepted it — so the case is built directly."""
-    txns = {f"pay_{i}": _txn(f"pay_{i}", "payment", 999) for i in range(4)}
+    """§4.3's dropped remainder — bounded by n − 1 **and backed by an allocation.**
+
+    Stage 17 added the second condition. `|delta| <= n` on its own is not a
+    diagnosis, it is a restatement of §8.2's per-transaction cap, so a check that
+    fired on it answered yes to every claim G4 was about to admit — and G4 asking
+    for "a named cause" would then have admitted exactly the same set. §4.3's
+    remainder exists only where a flat premium was split by integer division, and
+    that leaves a signature in the fees: 2,499 paise of a 2,500 charge, the last
+    one dropped.
+    """
+    txns = {f"pay_{i}": _txn(f"pay_{i}", "payment", 999, fee_paise=833)
+            for i in range(3)}
     assert diagnose(3, tuple(txns), txns).code == "allocation_remainder"
+
+
+def test_a_small_residual_with_no_allocation_behind_it_is_not_named():
+    """The other half, and the one that stops G4 absorbing a missing record: the
+    same three-paise gap over the same three payments, no premium allocated, and
+    the honest answer is that nothing in the input accounts for it."""
+    txns = {f"pay_{i}": _txn(f"pay_{i}", "payment", 999) for i in range(3)}
+    assert diagnose(3, tuple(txns), txns).code == "no_matching_residual"
 
 
 def test_an_unclaimed_net_is_named_as_a_candidate_never_as_the_answer():

@@ -75,7 +75,7 @@ def check(claim: Claim, line: BankLine, txns: Mapping[str, GatewayTxn],
     outcome = None
     if delta != 0:
         outcome = g4_outcome(claim, delta)
-        reason = g4_tolerance(claim, delta)
+        reason = g4_tolerance(claim, delta, txns)
         if reason:
             return _reject("G4", reason, delta, outcome)
         confidence = "tolerance"

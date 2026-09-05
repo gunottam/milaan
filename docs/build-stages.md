@@ -400,3 +400,47 @@ scoring FN.
   with-model table stands as the reason it is asserted for that configuration only.
 
 `git commit -m "stage 15: reversal-pair exclusion, precision 100% on ten seeds"`
+
+---
+
+## [ ] Stage 17 — what thirty seeds found that ten did not
+
+**Read:** §6.2, §8.2, §9.9, §11, and `docs/journal/stage-16-audit.md`. Not a feature stage —
+an adversarial pass over a frozen build, and the four things it broke.
+
+The board claimed **precision 100.0% across ten seeds**. Twenty fresh seeds produced **four
+false matches**, in four different mechanisms, none of them `DUPLICATE_CREDIT`:
+
+| seed | line | mechanism |
+|---|---|---|
+| 12 | `bl_0104` C1 tol −5p | G4 admitted an unexplained residual — a `SETTLEMENT_CONTAMINATION` |
+| 31 | `bl_0057` C1 tol +10p | the same, absorbing a `WITHHELD_RECORD` |
+| 10 | `bl_0002` C1 exact | G5 never fired: greedy claiming consumed the second composition first |
+| 6 | `bl_0079` C1 exact | truth stamped `verified` on a line it never enumerated |
+
+**Fix in this order, and re-measure between 1 and 2 — the precision figure is measured
+against a partly wrong oracle until 1 lands.**
+
+1. **`verified` must be earned.** `generator/breaks.py::rounding_drift` writes a forced truth
+   record stamped `verified` and never calls `classify`. Add the membership assertion that
+   should have shipped with §6.2, running **§9.3's own exact-then-tolerance rule** — exact-only
+   refuses all 150 working `ROUNDING_DRIFT` lines, the two-pass rule refuses the one that is
+   broken. Downgrade to `unproven`, list them in `truth.json`, **do not widen the search**.
+2. **G4 requires a named cause.** The caps bound how wrong, not why. Accept only where
+   `diagnose` names the residual — and tighten `allocation_remainder` first, because
+   `|delta| <= n` *is* §8.2's second cap and a check that fires on it admits everything.
+   Report recall before and after.
+3. **Diagnose seed 10's G5 miss** and say whether greedy can be fixed or is a stated limit.
+4. **Demo hardening:** `try/catch` in `poll()` clearing the interval and surfacing the error;
+   `res.ok` before reading `run_id`; `noise` validated on `RunRequest`.
+5. **`detective_ran` off hypotheses, not `usage.calls`** — a 429 is a call.
+6. `SETTLEMENT_WINDOW_DAYS` instead of `truth["config"]` in `api/`; stop `dataset()`
+   regenerating the board as a test side effect; render the hardcoded board claims from
+   `regression.json` **with the `measured_by` / `live: false` stamp**.
+7. **Re-run thirty seeds and update the board.** Replace "10 seeds" with the wider sweep.
+
+**Done when:** `pytest -q` and `pytest -q -m slow` green in `.venv`, `regression.json` carries
+thirty seeds, the board's headline names the wider sweep, and any surviving false match is
+reported with its mechanism rather than averaged away.
+
+**Measured:** PLACEHOLDER_MEASURED
