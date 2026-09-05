@@ -379,6 +379,81 @@ def test_deadline_cut_exceptions_disclose_that_the_type_moves_with_the_hardware(
     assert any("faster hardware" in token for token in exc.evidence)
 
 
+def _ambiguous_board():
+    """One credit two compositions balance against, plus one orphan order.
+
+    `pay_2` and `pay_3` are the same type, method, amount and settlement date, so
+    they have the same book shape and swapping them changes no figure. `rfnd_1` is
+    a refund of the same magnitude — it balances the same credit and books
+    differently, which is the whole EQUIVALENT / CONSEQUENTIAL split (§10.1).
+    """
+    txns = [_txn("pay_1", "payment", 60_000, settlement_id="setl_1"),
+            _txn("pay_2", "payment", 40_000, settlement_id="setl_1"),
+            _txn("pay_3", "payment", 40_000, settlement_id="setl_1"),
+            _txn("rfnd_1", "refund", 40_000, settlement_id="setl_1")]
+    lines = [_line("bl_1", credit=100_000)]
+    orders = [Order("ord_9001", "2026-01-02", "cust_1", 9_900, "INR", "paid", None)]
+    return txns, lines, orders
+
+
+def _tied_trace(bank_line_id: str, alternatives: list[list[str]]) -> list[dict]:
+    """One C1 trace row reporting a G5 tie — the shape `run_ladder` writes when
+    `resolve` refuses because two approved claims sat at the same |delta|."""
+    return [{"line": bank_line_id, "tier": "C1", "pass": 1, "pool": 4,
+             "candidates": len(alternatives), "won": False, "stale": 0,
+             "refused": True, "anchors": [], "unproven": None,
+             "tied": alternatives, "census": None}]
+
+
+def test_an_equivalent_ambiguity_is_typed_low_and_a_consequential_one_high():
+    """The badge has to distinguish them or it carries no information.
+
+    Both are "two compositions balance and G5 refused", and they are not equally
+    well evidenced. `CONSEQUENTIAL` is existential — one differing pair proves the
+    alternatives book differently — and the counterexample is in hand.
+    `EQUIVALENT` is universal, and it is established over whatever the search
+    stopped at: `solve_exact` takes two, because two is already a refusal. On
+    `bl_0048` the census counts 279 compositions that balance and the shape
+    comparison saw two of them.
+    """
+    txns, lines, orders = _ambiguous_board()
+    trace = _tied_trace("bl_1", [["pay_1", "pay_2"], ["pay_1", "pay_3"]])
+    # By bank line, not by position: §10.2 sorts the ledger and the orphan outranks
+    # this row.
+    equivalent = next(e for e in exception_ledger.build(
+        txns, lines, orders, matched={}, trace=trace).exceptions
+        if e.bank_line_id == "bl_1")
+    assert equivalent.exception_type == "AMBIGUOUS_EQUIVALENT"
+    assert equivalent.type_confidence == "low"
+    assert any("the search stopped at" in e for e in equivalent.evidence), \
+        "the row must say why it is low, not just be low"
+
+    # Same shape of refusal, one alternative swapped for a refund — different book
+    # shape, so the typing flips and the counterexample is in hand.
+    trace = _tied_trace("bl_1", [["pay_1", "pay_2"], ["pay_1", "rfnd_1"]])
+    consequential = next(e for e in exception_ledger.build(
+        txns, lines, orders, matched={}, trace=trace).exceptions
+        if e.bank_line_id == "bl_1")
+    assert consequential.exception_type == "AMBIGUOUS_CONSEQUENTIAL"
+    assert consequential.type_confidence == "high"
+
+
+def test_an_orphan_order_carries_the_order_id_it_is_about():
+    """`bank_line_id` is `None` for this type and correctly so — the break is that
+    the bank statement has nothing. But §13 renders an identifier column, and a dash
+    there reads as missing data rather than as not-applicable. The order id is what
+    a human goes and looks up."""
+    txns, lines, orders = _ambiguous_board()
+    ledger = exception_ledger.build(txns, lines, orders, matched={}, trace=[])
+    orphan = next(e for e in ledger.exceptions
+                  if e.exception_type == "ORPHAN_ORDER")
+    assert orphan.bank_line_id is None
+    assert orphan.order_id == "ord_9001"
+    assert orphan.as_dict()["order_id"] == "ord_9001"
+    # And the CLI board prints it in the same column §13 does.
+    assert any("ord_9001" in row for row in exception_ledger.render(ledger))
+
+
 def test_a_reversal_pair_is_typed_duplicate_credit_not_a_missing_record():
     """§3.2. Equal magnitude, opposite sign, adjacent calendar day. The balance
     column cannot detect it — a duplicate posting is a real posting."""

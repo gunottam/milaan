@@ -169,6 +169,12 @@ class LedgerException:
     # pair is the unit of meaning: one row on its own reads as an unexplained
     # credit, and the whole finding is that there are two.
     reverses: str | None = None
+    # For an `ORPHAN_ORDER`, the ERP order this row is about. `bank_line_id` is
+    # `None` for that type and correctly so — the break is that the bank statement
+    # has nothing — but a dash in an identifier column reads as missing data rather
+    # than as *not applicable*, and the order id is the thing a human goes and looks
+    # up. §13 renders whichever of the two the row has.
+    order_id: str | None = None
     # The gap this line could size on its own, signed, or `None` when it could
     # not. Only an anchored line can size one: without a settlement id there is
     # nothing to subtract the credit from, and §9.7's global sum is then the only
@@ -204,6 +210,7 @@ class LedgerException:
             "residual_paise": self.residual_paise,
             "risk_class": self.risk_class,
             "reverses": self.reverses,
+            "order_id": self.order_id,
             "census": [[sid, list(counts)] for sid, counts in self.census],
             "alternatives": [list(alt) for alt in self.alternatives],
         }
@@ -235,6 +242,7 @@ class _Draft:
     machine_dependent: bool = False
     residual_paise: Paise | None = None
     reverses: str | None = None
+    order_id: str | None = None
     census: tuple[tuple[str, tuple[int, ...]], ...] = ()
     alternatives: tuple[tuple[str, ...], ...] = ()
 
@@ -497,7 +505,26 @@ def _type_open_line(line: BankLine, steps: Sequence[Mapping], deadline_cut: bool
                            if equivalent else
                            f"Compare the {len(tied)} compositions on fee, GST, TDS "
                            "and settlement date, then choose.")},
-            hypotheses_tried=tried, tokens=3)
+            # **The two sub-types are not equally well evidenced, and the badge
+            # has to say so.** `CONSEQUENTIAL` is an existential claim — *these
+            # alternatives book differently* — and one differing pair proves it, so
+            # the counterexample is in hand and three tokens are earned.
+            #
+            # `EQUIVALENT` is a universal one: *the* alternatives post identical
+            # figures, book either. It is established by `len(shapes) == 1` over
+            # `tied`, and `tied` is whatever the search stopped at —
+            # `core.subsetsum.solve_exact` takes `max_solutions=2` because two is
+            # already a refusal. On `bl_0048` the census counts 279 compositions
+            # that balance and the shape comparison saw two of them. A third with a
+            # different book shape would make the line `CONSEQUENTIAL`, and the
+            # board would have told a human "book either" about a choice that moves
+            # a tax figure.
+            #
+            # So the third token is not awarded for a universal claim tested on a
+            # sample, and the row reads `low`. That is confidence in the *typing*,
+            # which is what this field means — the urgency split is `risk_class`,
+            # and it already puts this row in the documentation column.
+            hypotheses_tried=tried, tokens=3 if not equivalent else 1)
         draft.evidence.append(
             f"{len(tied)} compositions balance to {fmt_inr(target(line))} exactly; "
             f"G5 withdrew approval rather than pick one")
@@ -510,6 +537,12 @@ def _type_open_line(line: BankLine, steps: Sequence[Mapping], deadline_cut: bool
             if equivalent else
             "The alternatives differ in book shape, so the assignment changes a "
             "tax figure, a date or a counterparty")
+        if equivalent:
+            draft.evidence.append(
+                f"Typed low: the shapes compared are the {len(tied)} the search "
+                "stopped at (§9.3 takes two, because two is already a refusal), "
+                "not every composition that balances. One unreached alternative "
+                "with a different shape would make this AMBIGUOUS_CONSEQUENTIAL")
         return draft
 
     refusal = next((step["unproven"] for step in steps if step["unproven"]), None)
@@ -678,7 +711,7 @@ def build(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                              "detail": f"GET /v1/orders/{order.order_id}/payments"},
             # §3.3 is a two-sided fact and both sides are in the input: the ERP
             # says paid, the gateway has nothing. There is no third thing to check.
-            tokens=2)
+            tokens=2, order_id=order.order_id)
         draft.evidence.append(
             f"{order.order_id} is status=paid for {fmt_inr(order.gross_paise)} "
             f"on {order.order_date}")
@@ -710,7 +743,7 @@ def build(txns: Sequence[GatewayTxn], bank_lines: Sequence[BankLine],
                 hypotheses_tried=d.hypotheses_tried,
                 evidence=tuple(d.evidence), settlement_id=d.settlement_id,
                 residual_paise=d.residual_paise, reverses=d.reverses,
-                census=d.census, alternatives=d.alternatives,
+                order_id=d.order_id, census=d.census, alternatives=d.alternatives,
                 risk_class=risk_class(d.exception_type))
             for i, d in enumerate(drafts, start=1)),
         as_of=as_of,
@@ -749,7 +782,8 @@ def render(ledger: Ledger, limit: int = 12) -> list[str]:
                    f"{risk_class(kind)}")
     out.append("")
     for exc in ledger.exceptions[:limit]:
-        out.append(f"  {exc.exception_id}  {exc.bank_line_id or '—':<10}"
+        out.append(f"  {exc.exception_id}  "
+                   f"{exc.bank_line_id or exc.order_id or '—':<10}"
                    f"{fmt_inr(exc.amount_at_risk_paise):>16}  "
                    f"{exc.exception_type:<26} {exc.type_confidence:<7}"
                    f"{exc.age_bucket:>7}")

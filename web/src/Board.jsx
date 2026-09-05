@@ -259,7 +259,14 @@ function ExceptionRows({ rows, open, setOpen, risk }) {
                     && setOpen(isOpen ? null : exc.exception_id)}>
                 <td className="caret">{isOpen ? '▾' : '▸'}</td>
                 <td className="num amount">{fmtInr(exc.amount_at_risk_paise)}</td>
-                <td className="eid">{exc.bank_line_id ?? '—'}</td>
+                {/* An `ORPHAN_ORDER` has no bank line — that is the break — so
+                    the column carries the order id instead. A dash in an
+                    identifier column reads as missing data, and this row is the one
+                    place on the board where the identifier a human needs is not a
+                    bank line id (§3.3). */}
+                <td className="eid">
+                  {exc.bank_line_id ?? exc.order_id ?? '—'}
+                </td>
                 <td className="exc-meta">
                   {/* A reversal pair is one finding across two bank lines. Naming
                       the partner on the row is what stops each half reading as an
